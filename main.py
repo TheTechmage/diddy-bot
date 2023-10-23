@@ -1,5 +1,6 @@
 import json
 import uuid
+import os
 import traceback
 import requests
 import asyncio
@@ -16,23 +17,17 @@ from did_peer_2 import KeySpec, generate, resolve, ServiceEncoder
 from nacl.signing import SigningKey
 import sys
 
+LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO').upper()
 root = logging.getLogger()
-root.setLevel(logging.DEBUG)
+root.setLevel(LOG_LEVEL)
 
 handler = logging.StreamHandler(sys.stdout)
-handler.setLevel(logging.DEBUG)
+handler.setLevel(LOG_LEVEL)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 root.addHandler(handler)
 
-#logging.basicConfig(level=logging.DEBUG)
-logging.getLogger('didcomm').setLevel(logging.DEBUG)
-print("Loggers: ", [name for name in logging.root.manager.loggerDict])
-loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict]
-for logger in loggers:
-    logger.setLevel(logging.DEBUG)
-    logger.addHandler(handler)
-
+logging.getLogger('didcomm').setLevel(logging.WARN)
 
 def mock_expand_service(self, service: Dict[str, Any]) -> Dict[str, Any]:
     """Reverse the abbreviations in a service dictionary.
@@ -356,7 +351,8 @@ async def main():
                 pack_config=pack_config,
             )
             packed_msg = pack_result.packed_msg
-            #print(f"Sending {packed_msg} to {pack_result.service_metadata.service_endpoint}")
+            logger.debug(f"Sending {packed_msg} to {pack_result.service_metadata.service_endpoint}")
+            logger.info(f"Sending a '{message.type}' message to target DID.")
             post_response = requests.post(pack_result.service_metadata.service_endpoint, data=packed_msg)
             ##post_response_json = post_response.json()
             #print(json.dumps(json.loads(packed_msg), indent=2))
