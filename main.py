@@ -40,7 +40,6 @@ def mock_expand_service(self, service: Dict[str, Any]) -> Dict[str, Any]:
     This method will perform the inverse of abbreviate_service, replacing
     abbreviations with their full string.
     """
-    #print("meep")
     service = service[0] if isinstance(service, list) else service
     service = {
         self.reverse_common_string_abbreviations.get(k, k): v
@@ -113,9 +112,6 @@ async def mock__forward_if_needed(
         didcomm_id_generator=pack_params.forward_didcomm_id_generator,
     )
 pe.__forward_if_needed = mock__forward_if_needed
-#print(pe.__dict__)
-#asd
-
 ServiceEncoder._expand_service = mock_expand_service
 
 
@@ -132,17 +128,11 @@ class PeerDID2(didcomm.did_doc.did_resolver.DIDResolver):
         }[method_type]
 
     async def resolve(self, did: str) -> Optional[pydid.doc.DIDDocument]:
-        #print("")
-        #print(did)
         doc = resolve(did)
         doc["service"] = [
             self.transform_new_to_old_service(service)
             for service in doc["service"]
         ]
-        #print(doc["service"])
-        #print("===> .:.:.:.")
-        #print(json.dumps(doc, indent=2))
-        #print("=> .:")
 
         docdid = doc["id"]
 
@@ -166,12 +156,9 @@ class PeerDID2(didcomm.did_doc.did_resolver.DIDResolver):
                     format=didcomm.common.types.VerificationMaterialFormat.MULTIBASE,
                     value=vm["publicKeyMultibase"],
                 ),
-                #"publicKeyMultibase": vm["publicKeyMultibase"],
             })
             for vm in doc["verificationMethod"]
         ]
-        # print(json.dumps(doc, indent=2))
-        #print(".:.:.:. <===")
         services = [
             didcomm.did_doc.did_doc.DIDCommService(
                 id=did + service["id"],
@@ -188,8 +175,6 @@ class PeerDID2(didcomm.did_doc.did_resolver.DIDResolver):
             "verification_methods": doc["verificationMethod"],
             "didcomm_services": services,
         })
-        #print(resolved.serialize())
-        #print(".=:=.")
         return resolved
 
     def transform_new_to_old_service(self, service: Dict[str, Any]) -> Dict[str, Any]:
@@ -282,8 +267,6 @@ class SecretsManager:
             MULTIBASE_BASE58BTC + b58encode(MULTICODEC_X25519_PRIV + x_priv_key.encode()).decode()
         )
 
-        #print(pub_key_multi, x_pub_key_multi)
-
         did = generate(
             [KeySpec.encryption(x_pub_key_multi), KeySpec.verification(pub_key_multi)],
             [
@@ -324,10 +307,6 @@ async def main():
         priv_key_multi = secrets["ed25519"]["private"]
         x_priv_key_multi = secrets["x25519"]["private"]
         print("did: ", did)
-        #pub_ref = b58encode(MULTICODEC_ED25519_PUB + pub_key.encode()).decode()
-        #x_pub_ref = b58encode(MULTICODEC_X25519_PUB + x_pub_key.encode()).decode()
-        #pub_ref = "key-2"
-        #x_pub_ref = "key-1"
         pub_ref = pub_key_multi[1:9]
         x_pub_ref = x_pub_key_multi[1:9]
         resolved = resolve(did)
@@ -353,17 +332,6 @@ async def main():
         })
         dr = PeerDID2()
 
-        target_did = "did:peer:2.Vz6Mkk5UnJmiSdPjvwDLrzV5avSmhVDSxcR6CZqtiX5EyhMok.Ez6LSoBGn3Xd11ziG52oeZ3KiAJtKTNgjaYdMYFnSV2kEgcgz.SeyJ0IjoiZG0iLCJzIjp7InVyaSI6ImRpZDpwZWVyOjIuRXo2TFNqdFBDbzFXTDhKSHppYm02aUxhSFU0NkVhaG9hajZCVkRlenVWclpYNlFaMS5WejZNa3RBU0VRSDZMNkY2OEt3UjQ1TWlNSlFNQzF2djlSb3RNcDhpd3pGQ2ZLa3NaLlNXM3NpZENJNkltUnRJaXdpY3lJNkltaDBkSEJ6T2k4dlpHVjJMbU5zYjNWa2JXVmthV0YwYjNJdWFXNWthV05wYjNSbFkyZ3VhVzh2YldWemMyRm5aU0lzSW5JaU9sdGRMQ0poSWpwYkltUnBaR052YlcwdmRqSWlMQ0prYVdSamIyMXRMMkZwY0RJN1pXNTJQWEptWXpFNUlsMTlMSHNpZENJNkltUnRJaXdpY3lJNkluZHpjem92TDNkekxtUmxkaTVqYkc5MVpHMWxaR2xoZEc5eUxtbHVaR2xqYVc5MFpXTm9MbWx2TDNkeklpd2ljaUk2VzEwc0ltRWlPbHNpWkdsa1kyOXRiUzkyTWlJc0ltUnBaR052YlcwdllXbHdNanRsYm5ZOWNtWmpNVGtpWFgxZCIsImFjY2VwdCI6WyJkaWRjb21tL3YyIl19fQ"
-        #target_did = "did:peer:2.Ez6LSjtPCo1WL8JHzibm6iLaHU46Eahoaj6BVDezuVrZX6QZ1.Vz6MktASEQH6L6F68KwR45MiMJQMC1vv9RotMp8iwzFCfKksZ.SW3sidCI6ImRtIiwicyI6Imh0dHBzOi8vZGV2LmNsb3VkbWVkaWF0b3IuaW5kaWNpb3RlY2guaW8vbWVzc2FnZSIsInIiOltdLCJhIjpbImRpZGNvbW0vdjIiLCJkaWRjb21tL2FpcDI7ZW52PXJmYzE5Il19LHsidCI6ImRtIiwicyI6IndzczovL3dzLmRldi5jbG91ZG1lZGlhdG9yLmluZGljaW90ZWNoLmlvL3dzIiwiciI6W10sImEiOlsiZGlkY29tbS92MiIsImRpZGNvbW0vYWlwMjtlbnY9cmZjMTkiXX1d#6LSjtPCo"
-
-        #target_did = "did:peer:2.Vz6Mkk5UnJmiSdPjvwDLrzV5avSmhVDSxcR6CZqtiX5EyhMok.Ez6LSoBGn3Xd11ziG52oeZ3KiAJtKTNgjaYdMYFnSV2kEgcgz.SeyJ0IjoiZG0iLCJzIjp7InVyaSI6ImRpZDpwZWVyOjIuRXo2TFNqdFBDbzFXTDhKSHppYm02aUxhSFU0NkVhaG9hajZCVkRlenVWclpYNlFaMS5WejZNa3RBU0VRSDZMNkY2OEt3UjQ1TWlNSlFNQzF2djlSb3RNcDhpd3pGQ2ZLa3NaLlNleUowSWpvaVpHMGlMQ0p6SWpwYkltaDBkSEJ6T2k4dlpHVjJMbU5zYjNWa2JXVmthV0YwYjNJdWFXNWthV05wYjNSbFkyZ3VhVzh2YldWemMyRm5aU0lzSW5kemN6b3ZMM2R6TG1SbGRpNWpiRzkxWkcxbFpHbGhkRzl5TG1sdVpHbGphVzkwWldOb0xtbHZMM2R6SWwwc0luSWlPbHRkTENKaElqcGJJbVJwWkdOdmJXMHZkaklpTENKa2FXUmpiMjF0TDJGcGNESTdaVzUyUFhKbVl6RTVJbDE5IiwiYWNjZXB0IjpbImRpZGNvbW0vdjIiXX0sInIiOltdfQ"
-
-        #target_did = "did:peer:2.Vz6Mkk5UnJmiSdPjvwDLrzV5avSmhVDSxcR6CZqtiX5EyhMok.Ez6LSoBGn3Xd11ziG52oeZ3KiAJtKTNgjaYdMYFnSV2kEgcgz.SeyJ0IjoiZG0iLCJzIjp7InVyaSI6ImRpZDpwZWVyOjIuRXo2TFNqdFBDbzFXTDhKSHppYm02aUxhSFU0NkVhaG9hajZCVkRlenVWclpYNlFaMS5WejZNa3RBU0VRSDZMNkY2OEt3UjQ1TWlNSlFNQzF2djlSb3RNcDhpd3pGQ2ZLa3NaLlNleUowSWpvaVpHMGlMQ0p6SWpwYkltaDBkSEJ6T2k4dlpHVjJMbU5zYjNWa2JXVmthV0YwYjNJdWFXNWthV05wYjNSbFkyZ3VhVzh2YldWemMyRm5aU0pkTENKeUlqcGJYU3dpWVNJNld5SmthV1JqYjIxdEwzWXlJaXdpWkdsa1kyOXRiUzloYVhBeU8yVnVkajF5Wm1NeE9TSmRmUSIsImFjY2VwdCI6WyJkaWRjb21tL3YyIl19LCJyIjpbXX0"
-
-        #target_did = "did:peer:2.Vz6Mkk5UnJmiSdPjvwDLrzV5avSmhVDSxcR6CZqtiX5EyhMok.Ez6LSoBGn3Xd11ziG52oeZ3KiAJtKTNgjaYdMYFnSV2kEgcgz.SeyJ0IjoiZG0iLCJzIjp7InVyaSI6ImRpZDpwZWVyOjIuRXo2TFNqdFBDbzFXTDhKSHppYm02aUxhSFU0NkVhaG9hajZCVkRlenVWclpYNlFaMS5WejZNa3RBU0VRSDZMNkY2OEt3UjQ1TWlNSlFNQzF2djlSb3RNcDhpd3pGQ2ZLa3NaLlNleUowSWpvaVpHMGlMQ0p6SWpwYkltaDBkSEJ6T2k4dlpHVjJMbU5zYjNWa2JXVmthV0YwYjNJdWFXNWthV05wYjNSbFkyZ3VhVzh2YldWemMyRm5aU0pkTENKeUlqcGJJbVJwWkRwd1pXVnlPakl1UlhvMlRGTnFkRkJEYnpGWFREaEtTSHBwWW0wMmFVeGhTRlUwTmtWaGFHOWhhalpDVmtSbGVuVldjbHBZTmxGYU1TNVdlalpOYTNSQlUwVlJTRFpNTmtZMk9FdDNValExVFdsTlNsRk5RekYyZGpsU2IzUk5jRGhwZDNwR1EyWkxhM05hTGxOWE0zTnBaRU5KTmtsdFVuUkphWGRwWTNsSk5rbHRhREJrU0VKNlQyazRkbHBIVmpKTWJVNXpZak5XYTJKWFZtdGhWMFl3WWpOSmRXRlhOV3RoVjA1d1lqTlNiRmt5WjNWaFZ6aDJZbGRXZW1NeVJtNWFVMGx6U1c1SmFVOXNkR1JNUTBwb1NXcHdZa2x0VW5CYVIwNTJZbGN3ZG1ScVNXbE1RMHByWVZkU2FtSXlNWFJNTWtad1kwUkpOMXBYTlRKUVdFcHRXWHBGTlVsc01UbE1TSE5wWkVOSk5rbHRVblJKYVhkcFkzbEpOa2x1WkhwamVtOTJURE5rZWt4dFVteGthVFZxWWtjNU1WcEhNV3hhUjJ4b1pFYzVlVXh0YkhWYVIyeHFZVmM1TUZwWFRtOU1iV3gyVEROa2VrbHBkMmxqYVVrMlZ6RXdjMGx0UldsUGJITnBXa2RzYTFreU9YUmlVemt5VFdsSmMwbHRVbkJhUjA1MllsY3dkbGxYYkhkTmFuUnNZbTVaT1dOdFdtcE5WR3RwV0ZneFpDSmRMQ0poSWpwYkltUnBaR052YlcwdmRqSWlMQ0prYVdSamIyMXRMMkZwY0RJN1pXNTJQWEptWXpFNUlsMTkiLCJhY2NlcHQiOlsiZGlkY29tbS92MiJdfSwiciI6W119"
-
-        target_did = "did:peer:2.Vz6Mkk5UnJmiSdPjvwDLrzV5avSmhVDSxcR6CZqtiX5EyhMok.Ez6LSoBGn3Xd11ziG52oeZ3KiAJtKTNgjaYdMYFnSV2kEgcgz.SeyJ0IjoiZG0iLCJzIjp7InVyaSI6ImRpZDpwZWVyOjIuRXo2TFNqdFBDbzFXTDhKSHppYm02aUxhSFU0NkVhaG9hajZCVkRlenVWclpYNlFaMS5WejZNa3RBU0VRSDZMNkY2OEt3UjQ1TWlNSlFNQzF2djlSb3RNcDhpd3pGQ2ZLa3NaLlNXM3NpZENJNkltUnRJaXdpY3lJNkltaDBkSEJ6T2k4dlpHVjJMbU5zYjNWa2JXVmthV0YwYjNJdWFXNWthV05wYjNSbFkyZ3VhVzh2YldWemMyRm5aU0lzSW5JaU9sdGRMQ0poSWpwYkltUnBaR052YlcwdmRqSWlMQ0prYVdSamIyMXRMMkZwY0RJN1pXNTJQWEptWXpFNUlsMTlMSHNpZENJNkltUnRJaXdpY3lJNkluZHpjem92TDNkekxtUmxkaTVqYkc5MVpHMWxaR2xoZEc5eUxtbHVaR2xqYVc5MFpXTm9MbWx2TDNkeklpd2ljaUk2VzEwc0ltRWlPbHNpWkdsa1kyOXRiUzkyTWlJc0ltUnBaR052YlcwdllXbHdNanRsYm5ZOWNtWmpNVGtpWFgxZCIsImFjY2VwdCI6WyJkaWRjb21tL3YyIl19fQ"
-
         target_did = "did:peer:2.Vz6Mkh6Vii9dzFQ9FnUisinCr1prMn9U7CpvsFT6NzujAf9JM.Ez6LSmJNE7mhQpXcVMQR4yRPaxVH18GoMKsri4RmzXJZG71YG.SeyJ0IjoiZG0iLCJzIjp7InVyaSI6ImRpZDpwZWVyOjIuRXo2TFNqdFBDbzFXTDhKSHppYm02aUxhSFU0NkVhaG9hajZCVkRlenVWclpYNlFaMS5WejZNa3RBU0VRSDZMNkY2OEt3UjQ1TWlNSlFNQzF2djlSb3RNcDhpd3pGQ2ZLa3NaLlNXM3NpZENJNkltUnRJaXdpY3lJNkltaDBkSEJ6T2k4dlpHVjJMbU5zYjNWa2JXVmthV0YwYjNJdWFXNWthV05wYjNSbFkyZ3VhVzh2YldWemMyRm5aU0lzSW5JaU9sdGRMQ0poSWpwYkltUnBaR052YlcwdmRqSWlMQ0prYVdSamIyMXRMMkZwY0RJN1pXNTJQWEptWXpFNUlsMTlMSHNpZENJNkltUnRJaXdpY3lJNkluZHpjem92TDNkekxtUmxkaTVqYkc5MVpHMWxaR2xoZEc5eUxtbHVaR2xqYVc5MFpXTm9MbWx2TDNkeklpd2ljaUk2VzEwc0ltRWlPbHNpWkdsa1kyOXRiUzkyTWlJc0ltUnBaR052YlcwdllXbHdNanRsYm5ZOWNtWmpNVGtpWFgxZCIsImFjY2VwdCI6WyJkaWRjb21tL3YyIl19fQ"
 
         user_input = input("Target DID: ").strip()
@@ -377,15 +345,9 @@ async def main():
             target_did = user_input
 
         async def sendMessage(message):
-            #print("--------------------")
-            #print(message)
-            #print("--------------------")
 
             pack_config = didcomm.pack_encrypted.PackEncryptedConfig()
             pack_config.forward = True
-            #print("")
-            #print(pack_config)
-            #print("")
             pack_result = await didcomm.pack_encrypted.pack_encrypted(
                 resolvers_config=didcomm.common.resolvers.ResolversConfig(sr, dr),
                 message=message,
@@ -394,15 +356,11 @@ async def main():
                 pack_config=pack_config,
             )
             packed_msg = pack_result.packed_msg
-            #print("")
             #print(f"Sending {packed_msg} to {pack_result.service_metadata.service_endpoint}")
             post_response = requests.post(pack_result.service_metadata.service_endpoint, data=packed_msg)
             ##post_response_json = post_response.json()
-            #print("====")
             #print(json.dumps(json.loads(packed_msg), indent=2))
-            #print("====")
             ##print(post_response_json)
-            #print("====")
 
         from datetime import datetime
         display_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -452,7 +410,6 @@ async def main():
     except Exception as e:
         print("Exception?", e)
         print(traceback.format_exc())
-        #print(sys.exc_info()[2])
 
 loop = asyncio.get_event_loop()
 tasks = [
