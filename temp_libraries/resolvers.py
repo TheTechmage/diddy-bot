@@ -97,3 +97,32 @@ class BasicSecretsResolver(didcomm.secrets.secrets_resolver.SecretsResolver):
 
     async def get_keys(self, kids: List[str]) -> List[str]:
         return [kid for kid in self._secrets.keys() if kid in kids]
+
+def get_resolver_config(secrets):
+        did = secrets["did"]
+        pub_key_multi = secrets["ed25519"]["public"]
+        x_pub_key_multi = secrets["x25519"]["public"]
+        priv_key_multi = secrets["ed25519"]["private"]
+        x_priv_key_multi = secrets["x25519"]["private"]
+        pub_ref = pub_key_multi[1:9]
+        x_pub_ref = x_pub_key_multi[1:9]
+        sr = BasicSecretsResolver({
+            f"{did}#{pub_ref}": didcomm.secrets.secrets_resolver.Secret(**{
+                "type":didcomm.common.types.VerificationMethodType.ED25519_VERIFICATION_KEY_2020,
+                "kid": f"{did}#{pub_ref}",
+                "verification_material": didcomm.common.types.VerificationMaterial(
+                    format=didcomm.common.types.VerificationMaterialFormat.MULTIBASE,
+                    value=priv_key_multi,
+                ),
+            }),
+            f"{did}#{x_pub_ref}": didcomm.secrets.secrets_resolver.Secret(**{
+                "type":didcomm.common.types.VerificationMethodType.X25519_KEY_AGREEMENT_KEY_2020,
+                "kid": f"{did}#{x_pub_ref}",
+                "verification_material": didcomm.common.types.VerificationMaterial(
+                    format=didcomm.common.types.VerificationMaterialFormat.MULTIBASE,
+                    value=x_priv_key_multi,
+                ),
+            }),
+        })
+        dr = PeerDID2()
+        return didcomm.common.resolvers.ResolversConfig(sr, dr),

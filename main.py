@@ -11,7 +11,7 @@ from did_peer_2 import resolve
 import sys
 
 from temp_libraries import monkey_patch
-from temp_libraries.resolvers import BasicSecretsResolver, PeerDID2
+from temp_libraries.resolvers import BasicSecretsResolver, PeerDID2, get_resolver_config
 from temp_libraries.secrets import SecretsManager
 
 LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO').upper()
@@ -36,37 +36,14 @@ async def main():
         secrets = secret_manager.load_secrets()
         if not secrets:
             secrets = secret_manager.generate_and_save()
+
         did = secrets["did"]
-        pub_key_multi = secrets["ed25519"]["public"]
-        x_pub_key_multi = secrets["x25519"]["public"]
-        priv_key_multi = secrets["ed25519"]["private"]
-        x_priv_key_multi = secrets["x25519"]["private"]
         print("did: ", did)
-        pub_ref = pub_key_multi[1:9]
-        x_pub_ref = x_pub_key_multi[1:9]
         resolved = resolve(did)
 
         print(json.dumps(resolved, indent=2))
-        sr = BasicSecretsResolver({
-            f"{did}#{pub_ref}": didcomm.secrets.secrets_resolver.Secret(**{
-                "type":didcomm.common.types.VerificationMethodType.ED25519_VERIFICATION_KEY_2020,
-                "kid": f"{did}#{pub_ref}",
-                "verification_material": didcomm.common.types.VerificationMaterial(
-                    format=didcomm.common.types.VerificationMaterialFormat.MULTIBASE,
-                    value=priv_key_multi,
-                ),
-            }),
-            f"{did}#{x_pub_ref}": didcomm.secrets.secrets_resolver.Secret(**{
-                "type":didcomm.common.types.VerificationMethodType.X25519_KEY_AGREEMENT_KEY_2020,
-                "kid": f"{did}#{x_pub_ref}",
-                "verification_material": didcomm.common.types.VerificationMaterial(
-                    format=didcomm.common.types.VerificationMaterialFormat.MULTIBASE,
-                    value=x_priv_key_multi,
-                ),
-            }),
-        })
-        dr = PeerDID2()
 
+        resolvers_config = get_resolver_config(secrets)
         target_did = "did:peer:2.Vz6Mkh6Vii9dzFQ9FnUisinCr1prMn9U7CpvsFT6NzujAf9JM.Ez6LSmJNE7mhQpXcVMQR4yRPaxVH18GoMKsri4RmzXJZG71YG.SeyJ0IjoiZG0iLCJzIjp7InVyaSI6ImRpZDpwZWVyOjIuRXo2TFNqdFBDbzFXTDhKSHppYm02aUxhSFU0NkVhaG9hajZCVkRlenVWclpYNlFaMS5WejZNa3RBU0VRSDZMNkY2OEt3UjQ1TWlNSlFNQzF2djlSb3RNcDhpd3pGQ2ZLa3NaLlNXM3NpZENJNkltUnRJaXdpY3lJNkltaDBkSEJ6T2k4dlpHVjJMbU5zYjNWa2JXVmthV0YwYjNJdWFXNWthV05wYjNSbFkyZ3VhVzh2YldWemMyRm5aU0lzSW5JaU9sdGRMQ0poSWpwYkltUnBaR052YlcwdmRqSWlMQ0prYVdSamIyMXRMMkZwY0RJN1pXNTJQWEptWXpFNUlsMTlMSHNpZENJNkltUnRJaXdpY3lJNkluZHpjem92TDNkekxtUmxkaTVqYkc5MVpHMWxaR2xoZEc5eUxtbHVaR2xqYVc5MFpXTm9MbWx2TDNkeklpd2ljaUk2VzEwc0ltRWlPbHNpWkdsa1kyOXRiUzkyTWlJc0ltUnBaR052YlcwdllXbHdNanRsYm5ZOWNtWmpNVGtpWFgxZCIsImFjY2VwdCI6WyJkaWRjb21tL3YyIl19fQ"
 
         user_input = input("Target DID: ").strip()
@@ -84,7 +61,7 @@ async def main():
             pack_config = didcomm.pack_encrypted.PackEncryptedConfig()
             pack_config.forward = True
             pack_result = await didcomm.pack_encrypted.pack_encrypted(
-                resolvers_config=didcomm.common.resolvers.ResolversConfig(sr, dr),
+                resolvers_config=resolvers_config,
                 message=message,
                 frm=did,
                 to=target_did,
