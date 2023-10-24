@@ -125,4 +125,4 @@ def get_resolver_config(secrets):
             }),
         })
         dr = PeerDID2()
-        return didcomm.common.resolvers.ResolversConfig(sr, dr),
+        return didcomm.common.resolvers.ResolversConfig(sr, dr)
