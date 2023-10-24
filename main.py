@@ -5,17 +5,14 @@ import traceback
 import requests
 import asyncio
 import didcomm
-import pydid
 import logging
-from typing import Optional, List, Dict, Any
-from didcomm.common.types import VerificationMethodType
 
-from base58 import b58encode
-from did_peer_2 import KeySpec, generate, resolve
-from nacl.signing import SigningKey
+from did_peer_2 import resolve
 import sys
 
-from . import monkey_patch
+from temp_libraries import monkey_patch
+from temp_libraries.resolvers import BasicSecretsResolver, PeerDID2
+from temp_libraries.secrets import SecretsManager
 
 LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO').upper()
 root = logging.getLogger()
@@ -33,192 +30,12 @@ logger = logging.getLogger(__name__)
 monkey_patch.patch()
 
 
-class PeerDID2(didcomm.did_doc.did_resolver.DIDResolver):
-
-    @staticmethod
-    def method_type_str_to_enum(method_type: str) -> VerificationMethodType:
-        return {
-            "JsonWebKey2020": VerificationMethodType.JSON_WEB_KEY_2020,
-            "Ed25519VerificationKey2018": VerificationMethodType.ED25519_VERIFICATION_KEY_2018,  # noqa
-            "X25519KeyAgreementKey2019": VerificationMethodType.X25519_KEY_AGREEMENT_KEY_2019,  # noqa
-            "Ed25519VerificationKey2020": VerificationMethodType.ED25519_VERIFICATION_KEY_2020,  # noqa
-            "X25519KeyAgreementKey2020": VerificationMethodType.X25519_KEY_AGREEMENT_KEY_2020,  # noqa
-        }[method_type]
-
-    async def resolve(self, did: str) -> Optional[pydid.doc.DIDDocument]:
-        doc = resolve(did)
-        doc["service"] = [
-            self.transform_new_to_old_service(service)
-            for service in doc["service"]
-        ]
-
-        docdid = doc["id"]
-
-        def get_key(id):
-            for key in doc["verificationMethod"]:
-                if key["id"] == id:
-                    return docdid + "#" + key["publicKeyMultibase"][1:9]
-
-        doc["authentication"] = [
-            get_key(id) for id in doc["authentication"]
-        ]
-        doc["keyAgreement"] = [
-            get_key(id) for id in doc["keyAgreement"]
-        ]
-        doc["verificationMethod"] = [
-            didcomm.did_doc.did_doc.VerificationMethod(**{
-                "id": docdid + "#" + vm["publicKeyMultibase"][1:9],
-                "controller": vm["controller"],
-                "type": self.method_type_str_to_enum(vm["type"]),
-                "verification_material": didcomm.common.types.VerificationMaterial(
-                    format=didcomm.common.types.VerificationMaterialFormat.MULTIBASE,
-                    value=vm["publicKeyMultibase"],
-                ),
-            })
-            for vm in doc["verificationMethod"]
-        ]
-        services = [
-            didcomm.did_doc.did_doc.DIDCommService(
-                id=did + service["id"],
-                service_endpoint=service["serviceEndpoint"],
-                routing_keys=service.get("routingKeys", []),
-                accept=service.get("accept", ["didcomm/v2"]),
-            )
-            for service in doc["service"]
-        ]
-        resolved = didcomm.did_doc.did_doc.DIDDoc(**{
-            "did": did,
-            "key_agreement_kids": doc["keyAgreement"],
-            "authentication_kids": doc["authentication"],
-            "verification_methods": doc["verificationMethod"],
-            "didcomm_services": services,
-        })
-        return resolved
-
-    def transform_new_to_old_service(self, service: Dict[str, Any]) -> Dict[str, Any]:
-        """Transform a new service into an old service.
-
-        This is a bandaid for the fact that the DIDComm python library is expecting
-        old style services.
-        """
-        if isinstance(service["serviceEndpoint"], dict):
-            service_endpoint = service["serviceEndpoint"]["uri"]
-            accept = service["serviceEndpoint"].get("accept")
-            routing_keys = service["serviceEndpoint"].get("routingKeys")
-            service["serviceEndpoint"] = service_endpoint
-            service["accept"] = accept or ["didcomm/v2"]
-            service["routing_keys"] = routing_keys or []
-            return service
-
-        return service
-
-
-class BasicSecretsResolver(didcomm.secrets.secrets_resolver.SecretsResolver):
-
-    def __init__(self, secrets):
-        self._secrets = secrets
-
-    async def get_key(self, kid: str) -> Optional[didcomm.secrets.secrets_resolver.Secret]:
-        secret = self._secrets.get(kid)
-        return secret if secret else None
-
-    async def get_keys(self, kids: List[str]) -> List[str]:
-        return [kid for kid in self._secrets.keys() if kid in kids]
-
-
-MULTIBASE_BASE58BTC = "z"
-
-# 1110 1101  == ed
-# VarInt(ed) == 1110 1101 0000 0001
-# VarInt(ed) == 0000 0001 0000 0000
-MULTICODEC_ED25519_PUB = b"\xed\x01"
-MULTICODEC_X25519_PUB = b"\xec\x01"
-MULTICODEC_ED25519_PRIV = b"\x13\x00"
-MULTICODEC_X25519_PRIV = b"\x13\x02"
-MULTICODEC_ED25519_PRIV = b"\x80&" 
-MULTICODEC_X25519_PRIV = b"\x82&"
-
-
-class SecretsManager:
-
-    def __init__(self, storage_file: str = None):
-        self.file = storage_file or "secrets.json"
-
-    def load_secrets(self):
-        try:
-            file = open(self.file, "rb")
-            config = json.loads(file.read())
-            return config
-        except Exception:
-            logger.debug("Secrets file doesn't exist")
-            return None
-
-    def store_secrets(self, secrets):
-        try:
-            file = open(self.file, "wb+")
-            file.write(json.dumps(secrets).encode())
-        except Exception as err:
-            logger.debug("Failed to write secrets file")
-            logger.exception(err)
-
-    def generate_secrets(self):
-
-        # ED25519 - For authentication
-        priv_key = SigningKey.generate()
-        pub_key = priv_key.verify_key
-
-        # X25519 - For encryption
-        x_priv_key = SigningKey.generate().to_curve25519_private_key()
-        x_pub_key = x_priv_key.public_key
-
-
-        pub_key_multi = (
-            MULTIBASE_BASE58BTC + b58encode(MULTICODEC_ED25519_PUB + pub_key.encode()).decode()
-        )
-        x_pub_key_multi = (
-            MULTIBASE_BASE58BTC + b58encode(MULTICODEC_X25519_PUB + x_pub_key.encode()).decode()
-        )
-        priv_key_multi = (
-            MULTIBASE_BASE58BTC + b58encode(MULTICODEC_ED25519_PRIV + priv_key.encode()).decode()
-        )
-        x_priv_key_multi = (
-            MULTIBASE_BASE58BTC + b58encode(MULTICODEC_X25519_PRIV + x_priv_key.encode()).decode()
-        )
-
-        did = generate(
-            [KeySpec.encryption(x_pub_key_multi), KeySpec.verification(pub_key_multi)],
-            [
-                {
-                    "type": "DIDCommMessaging",
-                    "serviceEndpoint": {
-                        "uri": f"https://frostyfrog.net/api/schedule.json?run={uuid.uuid4()}",
-                        "accept": ["didcomm/v2", "didcomm/aip2;env=rfc587"],
-                        "routingKeys": ["did:example:123456789abcdefghi#keys-1"],
-                    },
-                }
-            ],
-        )
-        secrets = {
-            "ed25519": {
-                "public": pub_key_multi,
-                "private": priv_key_multi,
-            },
-            "x25519": {
-                "public": x_pub_key_multi,
-                "private": x_priv_key_multi,
-            },
-            "did": did,
-        }
-
-        return secrets
-
 async def main():
     try:
         secret_manager = SecretsManager()
         secrets = secret_manager.load_secrets()
         if not secrets:
-            secrets = secret_manager.generate_secrets()
-            secret_manager.store_secrets(secrets)
+            secrets = secret_manager.generate_and_save()
         did = secrets["did"]
         pub_key_multi = secrets["ed25519"]["public"]
         x_pub_key_multi = secrets["x25519"]["public"]
