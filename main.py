@@ -68,9 +68,12 @@ async def main():
             logger.debug(f"Sending {packed_msg} to {pack_result.service_metadata.service_endpoint}")
             logger.info(f"Sending a '{message.type}' message to target DID.")
             post_response = requests.post(pack_result.service_metadata.service_endpoint, data=packed_msg)
-            ##post_response_json = post_response.json()
-            #print(json.dumps(json.loads(packed_msg), indent=2))
-            ##print(post_response_json)
+            try:
+                # logging.debug(json.dumps(json.loads(packed_msg), indent=2))
+                post_response_json = post_response.json()
+                logging.debug(post_response_json)
+            except Exception:
+                pass
 
         from datetime import datetime
         display_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
