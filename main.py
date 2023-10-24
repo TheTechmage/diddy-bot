@@ -48,9 +48,9 @@ async def main():
 
         print(json.dumps(resolved, indent=2))
         sr = BasicSecretsResolver({
-            f"{did}#{x_pub_ref}": didcomm.secrets.secrets_resolver.Secret(**{
+            f"{did}#{pub_ref}": didcomm.secrets.secrets_resolver.Secret(**{
                 "type":didcomm.common.types.VerificationMethodType.ED25519_VERIFICATION_KEY_2020,
-                "kid": f"{did}#{x_pub_ref}",
+                "kid": f"{did}#{pub_ref}",
                 "verification_material": didcomm.common.types.VerificationMaterial(
                     format=didcomm.common.types.VerificationMaterialFormat.MULTIBASE,
                     value=priv_key_multi,
