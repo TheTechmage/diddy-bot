@@ -71,11 +71,8 @@ class SecretsManager:
             [
                 {
                     "type": "DIDCommMessaging",
-                    "serviceEndpoint": {
-                        "uri": f"https://frostyfrog.net/api/schedule.json?run={uuid.uuid4()}",
-                        "accept": ["didcomm/v2", "didcomm/aip2;env=rfc587"],
-                        "routingKeys": ["did:example:123456789abcdefghi#keys-1"],
-                    },
+                    "accept": ["didcomm/v2"],
+                    "serviceEndpoint": "",
                 }
             ],
         )

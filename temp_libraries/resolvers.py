@@ -75,10 +75,10 @@ class PeerDID2(didcomm.did_doc.did_resolver.DIDResolver):
         old style services.
         """
         if isinstance(service["serviceEndpoint"], dict):
-            service_endpoint = service["serviceEndpoint"]["uri"]
+            service_endpoint = service["serviceEndpoint"].get("uri")
             accept = service["serviceEndpoint"].get("accept")
             routing_keys = service["serviceEndpoint"].get("routingKeys")
-            service["serviceEndpoint"] = service_endpoint
+            service["serviceEndpoint"] = service_endpoint or ""
             service["accept"] = accept or ["didcomm/v2"]
             service["routing_keys"] = routing_keys or []
             return service
