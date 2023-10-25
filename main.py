@@ -5,9 +5,12 @@ import traceback
 import requests
 import asyncio
 import didcomm
+from typing import Dict
 import logging
+import base64
 
 from did_peer_2 import resolve
+from did_peer_2 import KeySpec, generate
 import sys
 
 from temp_libraries import monkey_patch
@@ -29,6 +32,10 @@ logger = logging.getLogger(__name__)
 
 monkey_patch.patch()
 
+from didcomm.unpack import unpack
+
+MEDIATOR_DID = "did:peer:2.Ez6LSjtPCo1WL8JHzibm6iLaHU46Eahoaj6BVDezuVrZX6QZ1.Vz6MktASEQH6L6F68KwR45MiMJQMC1vv9RotMp8iwzFCfKksZ.SW3sidCI6ImRtIiwicyI6Imh0dHBzOi8vZGV2LmNsb3VkbWVkaWF0b3IuaW5kaWNpb3RlY2guaW8vbWVzc2FnZSIsInIiOltdLCJhIjpbImRpZGNvbW0vdjIiLCJkaWRjb21tL2FpcDI7ZW52PXJmYzE5Il19LHsidCI6ImRtIiwicyI6IndzczovL3dzLmRldi5jbG91ZG1lZGlhdG9yLmluZGljaW90ZWNoLmlvL3dzIiwiciI6W10sImEiOlsiZGlkY29tbS92MiIsImRpZGNvbW0vYWlwMjtlbnY9cmZjMTkiXX1d"
+
 
 async def main():
     try:
@@ -37,9 +44,9 @@ async def main():
         if not secrets:
             secrets = secret_manager.generate_and_save()
 
-        did = secrets["did"]
-        print("did: ", did)
-        resolved = resolve(did)
+        my_did = secrets["did"]
+        print("did: ", my_did)
+        resolved = resolve(my_did)
         print(json.dumps(resolved, indent=2))
 
         resolvers_config = get_resolver_config(secrets)
@@ -52,16 +59,17 @@ async def main():
             raise Exception("Invalid DID specified") from err
 
         target_did = user_input
+        did = my_did
 
-        async def sendMessage(message):
+        async def sendMessage(message, target):
 
             pack_config = didcomm.pack_encrypted.PackEncryptedConfig()
             pack_config.forward = True
             pack_result = await didcomm.pack_encrypted.pack_encrypted(
                 resolvers_config=resolvers_config,
                 message=message,
-                frm=did,
-                to=target_did,
+                frm=my_did if target == MEDIATOR_DID else did,
+                to=target,
                 pack_config=pack_config,
             )
             packed_msg = pack_result.packed_msg
@@ -71,9 +79,114 @@ async def main():
             try:
                 # logging.debug(json.dumps(json.loads(packed_msg), indent=2))
                 post_response_json = post_response.json()
-                logging.debug(post_response_json)
-            except Exception:
+                msg_type = post_response_json.get("type")
+                if msg_type and "problem-report" in msg_type:
+                    logger.error(post_response_json)
+                # print(json.dumps(didcomm.__dict__, indent=2, default=lambda o: '<not serializable>'))
+                unpack_result = await unpack(
+                    resolvers_config=resolvers_config,
+                    packed_msg=post_response_json,
+                )
+                message = unpack_result.message
+                logger.debug(message)
+                return message
+            except Exception as err:
+                logger.exception(err)
                 pass
+            return
+
+        message = didcomm.message.Message(
+            type="https://didcomm.org/coordinate-mediation/3.0/mediate-request",
+            id=str(uuid.uuid4()),
+            body={},
+            frm=my_did,
+            to=[MEDIATOR_DID],
+        )
+        message = await sendMessage(message, target=MEDIATOR_DID)
+
+        if message.type == "https://didcomm.org/coordinate-mediation/3.0/mediate-grant":
+            mediator_did = message.body["routing_did"][0]
+            #resolved_did = resolve(mediator_did)
+            did = generate(
+                [KeySpec.encryption(secrets["x25519"]["public"]), KeySpec.verification(secrets["ed25519"]["public"])],
+                #resolved_did["services"],
+                [
+                    {
+                        "type": "DIDCommMessaging",
+                        "serviceEndpoint": {
+                            "uri": mediator_did,
+                            "accept": ["didcomm/v2"],
+                        },
+                    }
+                ],
+            )
+            print("mediated did: ", did)
+            resolvers_config.secrets_resolver.add_keys_for_did(did)
+        #message = didcomm.message.Message(
+        #    type="https://didcomm.org/coordinate-mediation/3.0/recipient-update",
+        #    id=str(uuid.uuid4()),
+        #    body={
+        #        "updates": [
+        #            {
+        #                "recipient_did": did,
+        #                "action": "add",
+        #            },
+        #        ],
+        #    },
+        #    frm=my_did,
+        #    to=[MEDIATOR_DID],
+        #)
+        #message = await sendMessage(message, target=MEDIATOR_DID)
+        #print(message)
+
+        #didcomm.message.GenericMessage.lang="en"
+        message = didcomm.message.Message(
+            type="https://didcomm.org/messagepickup/3.0/status-request",
+            id=str(uuid.uuid4()),
+            body={},
+            frm=my_did,
+            to=[MEDIATOR_DID],
+        )
+        message = await sendMessage(message, target=MEDIATOR_DID)
+        #print(message)
+
+        if message.body["message_count"] > 0:
+            message = didcomm.message.Message(
+                type="https://didcomm.org/messagepickup/3.0/delivery-request",
+                id=str(uuid.uuid4()),
+                body={
+                    "limit": message.body["message_count"],
+                },
+                frm=my_did,
+                to=[MEDIATOR_DID],
+            )
+            message = await sendMessage(message, target=MEDIATOR_DID)
+            # print(message)
+            for attach in message.attachments:
+                logger.info("Received message %s", attach.id[:-58])
+                unpacked_msg = await unpack(
+                    resolvers_config=resolvers_config,
+                    packed_msg=attach.data.json,
+                )
+                msg = unpacked_msg.message
+                logger.info("Received message %s", unpacked_msg.message)
+                #print(msg.type)
+                if msg.type == "https://didcomm.org/basicmessage/2.0/message":
+                    print(f"Got message: {msg.body['content']}")
+            #return
+            message = didcomm.message.Message(
+                type="https://didcomm.org/messagepickup/3.0/messages-received",
+                id=str(uuid.uuid4()),
+                body={
+                    "message_id_list": [ msg.id for msg in message.attachments ],
+                },
+                frm=my_did,
+                to=[MEDIATOR_DID],
+            )
+            message = await sendMessage(message, target=MEDIATOR_DID)
+
+            return
+
 
         from datetime import datetime
         display_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -89,7 +202,10 @@ async def main():
             frm=did,
             to=[target_did],
         )
-        await sendMessage(message)
+        await sendMessage(message, target_did)
+
+        # return
+
         message = didcomm.message.Message(
             type="https://didcomm.org/question-answer/1.0/question",
             body={
@@ -104,7 +220,7 @@ async def main():
             frm=did,
             to=[target_did],
         )
-        await sendMessage(message)
+        await sendMessage(message, target_did)
 
         async def sendBasicMessage(message: str):
             message = didcomm.message.Message(
@@ -114,7 +230,7 @@ async def main():
                 frm=did,
                 to=[target_did],
             )
-            await sendMessage(message)
+            await sendMessage(message, target_did)
         await sendBasicMessage("Testing from a script!")
         await sendBasicMessage("This contact is from a script written in Python 3. If you received this message, then that means that the proof of concept worked! However, one of the huge flaws at present is the over-complicated nature")
         await sendBasicMessage("There are a few functions/methods being overridden in underlying libraries to bypass problems related to did:peer:2 and the libraries that implement them (primarily the didcomm library)")
