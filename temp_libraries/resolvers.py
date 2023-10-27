@@ -1,10 +1,26 @@
 import didcomm
+from base58 import b58encode
+import json
+from peerdid.keys import BaseKey
 import pydid
 from typing import Optional, List, Dict, Any
 from didcomm.common.types import VerificationMethodType
 
-from did_peer_2 import resolve
+#from did_peer_2 import resolve
+from .monkey_patch import resolve
+from nacl.signing import VerifyKey
 
+MULTIBASE_BASE58BTC = "z"
+
+# 1110 1101  == ed
+# VarInt(ed) == 1110 1101 0000 0001
+# VarInt(ed) == 0000 0001 0000 0000
+MULTICODEC_ED25519_PUB = b"\xed\x01"
+MULTICODEC_X25519_PUB = b"\xec\x01"
+MULTICODEC_ED25519_PRIV = b"\x13\x00"
+MULTICODEC_X25519_PRIV = b"\x13\x02"
+MULTICODEC_ED25519_PRIV = b"\x80&" 
+MULTICODEC_X25519_PRIV = b"\x82&"
 
 class PeerDID2(didcomm.did_doc.did_resolver.DIDResolver):
 
@@ -19,7 +35,61 @@ class PeerDID2(didcomm.did_doc.did_resolver.DIDResolver):
         }[method_type]
 
     async def resolve(self, did: str) -> Optional[pydid.doc.DIDDocument]:
+        if did.startswith("did:key:"):
+            services = [
+                didcomm.did_doc.did_doc.DIDCommService(
+                    id= "did:key:z6MkgSYBM63iHNeiT2VSQu7bbtXhGYCQrPJ8uEGurbfGbbgE",
+                    service_endpoint="https://us-east.public.mediator.indiciotech.io/message",
+                    routing_keys=[],
+                    accept=["didcomm/v2"],
+                )
+            ]
+            kkey = BaseKey.from_jwk({
+                "kty": "OKP",
+                "crv": "Ed25519",
+                "x": "HYgJFp8zwW3ME9B9NruS2GiYcjiJG7SoPENQln-SL6s",
+            }).public_key
+            kkey = VerifyKey(kkey).to_curve25519_public_key()
+            kkey = (
+                MULTIBASE_BASE58BTC + b58encode(MULTICODEC_X25519_PUB + kkey.encode()).decode()
+            )
+            resolved = didcomm.did_doc.did_doc.DIDDoc(**{
+                "did": "did:key:z6MkgSYBM63iHNeiT2VSQu7bbtXhGYCQrPJ8uEGurbfGbbgE",
+                "verification_methods": [
+                    didcomm.did_doc.did_doc.VerificationMethod(**{
+                        "id": "did:key:z6MkgSYBM63iHNeiT2VSQu7bbtXhGYCQrPJ8uEGurbfGbbgE#z6MkgSYBM63iHNeiT2VSQu7bbtXhGYCQrPJ8uEGurbfGbbgE",
+                        "type": self.method_type_str_to_enum("Ed25519VerificationKey2018"),
+                        "controller": "did:key:z6MkgSYBM63iHNeiT2VSQu7bbtXhGYCQrPJ8uEGurbfGbbgE",
+                        "verification_material": didcomm.common.types.VerificationMaterial(
+                            format=didcomm.common.types.VerificationMaterialFormat.JWK,
+                            value={
+                                "kty": "OKP",
+                                "crv": "Ed25519",
+                                "x": "HYgJFp8zwW3ME9B9NruS2GiYcjiJG7SoPENQln-SL6s"
+                            },
+                        ),
+                    }),
+                    didcomm.did_doc.did_doc.VerificationMethod(**{
+                        "id": "did:key:z6MkgSYBM63iHNeiT2VSQu7bbtXhGYCQrPJ8uEGurbfGbbgE#key",
+                        "type": self.method_type_str_to_enum("X25519KeyAgreementKey2020"),
+                        "controller": "did:key:z6MkgSYBM63iHNeiT2VSQu7bbtXhGYCQrPJ8uEGurbfGbbgE",
+                        "verification_material": didcomm.common.types.VerificationMaterial(
+                            format=didcomm.common.types.VerificationMaterialFormat.MULTIBASE,
+                            value=kkey,
+                        ),
+                    })
+                ],
+                "authentication_kids": [
+                    "did:key:z6MkgSYBM63iHNeiT2VSQu7bbtXhGYCQrPJ8uEGurbfGbbgE#z6MkgSYBM63iHNeiT2VSQu7bbtXhGYCQrPJ8uEGurbfGbbgE"
+                ],
+                "key_agreement_kids": [
+                    "did:key:z6MkgSYBM63iHNeiT2VSQu7bbtXhGYCQrPJ8uEGurbfGbbgE#key"
+                ],
+            "didcomm_services": services,
+            })
+            return resolved
         doc = resolve(did)
+        # print(json.dumps(doc, indent=2, default=lambda o: '<not serializable>'))
         doc["service"] = [
             self.transform_new_to_old_service(service)
             for service in doc["service"]
