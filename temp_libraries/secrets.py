@@ -22,10 +22,25 @@ MULTICODEC_X25519_PRIV = b"\x82&"
 
 
 class SecretsManager:
+    """SecretsManager.
+    """
+
     def __init__(self, storage_file: str | None = None):
+        """__init__.
+
+        Args:
+            storage_file (str | None): storage_file
+        """
         self.file = storage_file or "secrets.json"
 
     def load_secrets(self) -> Dict[str, Any] | None:
+        """Load secrets from a JSON file (INSECURE!!!).
+
+        Args:
+
+        Returns:
+            Dict[str, Any] | None:
+        """
         try:
             file = open(self.file, "rb")
             config = json.loads(file.read())
@@ -35,6 +50,11 @@ class SecretsManager:
             return None
 
     def store_secrets(self, secrets: Dict[str, Any]):
+        """Store secrets into a JSON file (INSECURE!!!).
+
+        Args:
+            secrets (Dict[str, Any]): secrets
+        """
         try:
             file = open(self.file, "wb+")
             file.write(json.dumps(secrets).encode())
@@ -43,6 +63,13 @@ class SecretsManager:
             logger.exception(err)
 
     def generate_secrets(self) -> Dict[str, Any]:
+        """Generate DID & relevant secrets.
+
+        Args:
+
+        Returns:
+            Dict[str, Any]:
+        """
 
         # ED25519 - For authentication
         priv_key = SigningKey.generate()
@@ -94,6 +121,13 @@ class SecretsManager:
         return secrets
 
     def generate_and_save(self) -> Dict[str, Any]:
+        """Generate and save secrets.
+
+        Args:
+
+        Returns:
+            Dict[str, Any]:
+        """
         secrets = self.generate_secrets()
         self.store_secrets(secrets)
         return secrets

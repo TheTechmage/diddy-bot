@@ -40,7 +40,16 @@ MEDIATOR_DID = "did:peer:2.Ez6LSjtPCo1WL8JHzibm6iLaHU46Eahoaj6BVDezuVrZX6QZ1.Vz6
 
 
 class Bot:
+    """A basic "bot" framwork to design around.
+    """
+
     async def handle_command(self, command: str, message: Message):
+        """Handles "commands" sent via basic message.
+
+        Args:
+            command (str): command, equivalant to message.body["content"]
+            message (Message): message
+        """
         match command.lower().strip().split()[0]:
             case "hello":
                 print(message)
@@ -76,6 +85,12 @@ class Bot:
                 await self.sendBasicMessage(message.frm, command)
 
     async def handle_message(self, msg_type: str, message: Message):
+        """Handles DIDComm messages based on msg_type.
+
+        Args:
+            msg_type (str): msg_type
+            message (Message): message
+        """
         match msg_type:
             case "https://didcomm.org/basicmessage/2.0/message":
                 await self.handle_command(message.body["content"], message)
@@ -108,6 +123,8 @@ class Bot:
                 logger.error("UNKNOWN MESSAGE RECEIVED! %s", msg_type)
 
     async def fetch_messages(self):
+        """Fetch new messages from the mediator that have yet to be handled.
+        """
         # didcomm.message.GenericMessage.lang="en"
         message = Message(
             type="https://didcomm.org/messagepickup/3.0/status-request",
@@ -160,6 +177,13 @@ class Bot:
     async def sendMessage(
         self, message: Message, target: DID, ws: websockets.connect | None = None
     ):
+        """Send a message to another DIDComm agent.
+
+        Args:
+            message (Message): message
+            target (DID): target
+            ws (websockets.connect | None): ws
+        """
 
         pack_config = didcomm.pack_encrypted.PackEncryptedConfig()
         pack_config.forward = True
@@ -204,6 +228,12 @@ class Bot:
         return
 
     async def sendBasicMessage(self, target_did: DID, message: str):
+        """Send a basicmessage to the target_did.
+
+        Args:
+            target_did (DID): target_did
+            message (str): message
+        """
         message = Message(
             type="https://didcomm.org/basicmessage/2.0/message",
             body={"content": message},
@@ -214,6 +244,8 @@ class Bot:
         await self.sendMessage(message, target_did)
 
     async def handle_websocket(self):
+        """Handle websocket messages.
+        """
         async with self.websocket as websocket:
             # await websocket.send("msg")
             logger.info("Listening on websocket")
@@ -249,6 +281,8 @@ class Bot:
             await websocket.close()
 
     async def start(self):
+        """Start up the "bot" application and begin sending/receiving messages.
+        """
         secret_manager = SecretsManager()
         secrets = secret_manager.load_secrets()
         # secrets = None

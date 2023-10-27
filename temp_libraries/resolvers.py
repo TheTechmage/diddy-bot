@@ -24,8 +24,19 @@ MULTICODEC_X25519_PRIV = b"\x82&"
 
 
 class PeerDID2(didcomm.did_doc.did_resolver.DIDResolver):
+    """PeerDID2.
+    """
+
     @staticmethod
     def method_type_str_to_enum(method_type: str) -> VerificationMethodType:
+        """method_type_str_to_enum.
+
+        Args:
+            method_type (str): method_type
+
+        Returns:
+            VerificationMethodType:
+        """
         return {
             "JsonWebKey2020": VerificationMethodType.JSON_WEB_KEY_2020,
             "Ed25519VerificationKey2018": VerificationMethodType.ED25519_VERIFICATION_KEY_2018,  # noqa
@@ -35,6 +46,14 @@ class PeerDID2(didcomm.did_doc.did_resolver.DIDResolver):
         }[method_type]
 
     async def resolve(self, did: pydid.DID) -> Optional[pydid.doc.DIDDocument]:
+        """resolve.
+
+        Args:
+            did (pydid.DID): did
+
+        Returns:
+            Optional[pydid.doc.DIDDocument]:
+        """
         if did.startswith("did:key:"):
             services = [
                 didcomm.did_doc.did_doc.DIDCommService(
@@ -110,6 +129,11 @@ class PeerDID2(didcomm.did_doc.did_resolver.DIDResolver):
         docdid = doc["id"]
 
         def get_key(id):
+            """get_key.
+
+            Args:
+                id:
+            """
             for key in doc["verificationMethod"]:
                 if key["id"] == id:
                     return docdid + "#" + key["publicKeyMultibase"][1:9]
@@ -171,20 +195,50 @@ class PeerDID2(didcomm.did_doc.did_resolver.DIDResolver):
 
 
 class BasicSecretsResolver(didcomm.secrets.secrets_resolver.SecretsResolver):
+    """BasicSecretsResolver.
+    """
+
     def __init__(self, secrets: Dict[str, Any], secrets_config: Dict[str, Any]):
+        """__init__.
+
+        Args:
+            secrets (Dict[str, Any]): secrets
+            secrets_config (Dict[str, Any]): secrets_config
+        """
         self._secrets = secrets
         self.secrets_config = secrets_config
 
     async def get_key(
         self, kid: str
     ) -> Optional[didcomm.secrets.secrets_resolver.Secret]:
+        """get_key.
+
+        Args:
+            kid (str): kid
+
+        Returns:
+            Optional[didcomm.secrets.secrets_resolver.Secret]:
+        """
         secret = self._secrets.get(kid)
         return secret if secret else None
 
     async def get_keys(self, kids: List[str]) -> List[str]:
+        """get_keys.
+
+        Args:
+            kids (List[str]): kids
+
+        Returns:
+            List[str]:
+        """
         return [kid for kid in self._secrets.keys() if kid in kids]
 
     def add_keys_for_did(self, did: pydid.DID):
+        """add_keys_for_did.
+
+        Args:
+            did (pydid.DID): did
+        """
         pub_key_multi = self.secrets_config["ed25519"]["public"]
         x_pub_key_multi = self.secrets_config["x25519"]["public"]
         priv_key_multi = self.secrets_config["ed25519"]["private"]
@@ -219,6 +273,14 @@ class BasicSecretsResolver(didcomm.secrets.secrets_resolver.SecretsResolver):
 def get_resolver_config(
     secrets: Dict[str, Any]
 ) -> didcomm.common.resolvers.ResolversConfig:
+    """get_resolver_config.
+
+    Args:
+        secrets (Dict[str, Any]): secrets
+
+    Returns:
+        didcomm.common.resolvers.ResolversConfig:
+    """
     did = secrets["did"]
     pub_key_multi = secrets["ed25519"]["public"]
     x_pub_key_multi = secrets["x25519"]["public"]
