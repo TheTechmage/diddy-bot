@@ -22,7 +22,6 @@ MULTICODEC_X25519_PRIV = b"\x82&"
 
 
 class SecretsManager:
-
     def __init__(self, storage_file: str | None = None):
         self.file = storage_file or "secrets.json"
 
@@ -54,16 +53,20 @@ class SecretsManager:
         x_pub_key = x_priv_key.public_key
 
         pub_key_multi = (
-            MULTIBASE_BASE58BTC + b58encode(MULTICODEC_ED25519_PUB + pub_key.encode()).decode()
+            MULTIBASE_BASE58BTC
+            + b58encode(MULTICODEC_ED25519_PUB + pub_key.encode()).decode()
         )
         x_pub_key_multi = (
-            MULTIBASE_BASE58BTC + b58encode(MULTICODEC_X25519_PUB + x_pub_key.encode()).decode()
+            MULTIBASE_BASE58BTC
+            + b58encode(MULTICODEC_X25519_PUB + x_pub_key.encode()).decode()
         )
         priv_key_multi = (
-            MULTIBASE_BASE58BTC + b58encode(MULTICODEC_ED25519_PRIV + priv_key.encode()).decode()
+            MULTIBASE_BASE58BTC
+            + b58encode(MULTICODEC_ED25519_PRIV + priv_key.encode()).decode()
         )
         x_priv_key_multi = (
-            MULTIBASE_BASE58BTC + b58encode(MULTICODEC_X25519_PRIV + x_priv_key.encode()).decode()
+            MULTIBASE_BASE58BTC
+            + b58encode(MULTICODEC_X25519_PRIV + x_priv_key.encode()).decode()
         )
 
         did = generate(

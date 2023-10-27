@@ -45,8 +45,7 @@ logger = logging.getLogger(__name__)
 
 
 def mock_expand_service(
-    self,
-    service: Union[Dict[str, Any], List[Dict[str, Any]]]
+    self, service: Union[Dict[str, Any], List[Dict[str, Any]]]
 ) -> Dict[str, Any]:
     """Reverse the abbreviations in a service dictionary.
 
@@ -68,8 +67,7 @@ def mock_expand_service(
             service[k] = self._expand_service(v)
         if isinstance(v, list):
             service[k] = [
-                self._expand_service(e)
-                if isinstance(e, dict) else e for e in v
+                self._expand_service(e) if isinstance(e, dict) else e for e in v
             ]
 
     return service
@@ -81,9 +79,7 @@ def mock_reencode_service(self, data: str) -> Union[str, List[str]]:
     reencoded = []
     if isinstance(services, list):
         for service in services:
-            reencoded.append(
-                self.encode_service(service)
-            )
+            reencoded.append(self.encode_service(service))
     else:
         return data
     return reencoded
@@ -212,11 +208,15 @@ async def mock__forward_if_needed(
         didcomm_id_generator=pack_params.forward_didcomm_id_generator,
     )
 
+
 class Message(didcomm.message.GenericMessage[didcomm.common.types.JSON_OBJ]):
     def as_dict(self) -> dict:
         if not isinstance(self.body, Dict):
-            raise didcomm.common.types.DIDCommValueError(f"Body structure is invalid: {self.body}")
+            raise didcomm.common.types.DIDCommValueError(
+                f"Body structure is invalid: {self.body}"
+            )
         return super().as_dict()
+
     @classmethod
     def from_dict(self, d: dict) -> didcomm.message.Message:
         if "lang" in d:
@@ -227,7 +227,6 @@ class Message(didcomm.message.GenericMessage[didcomm.common.types.JSON_OBJ]):
 def patch():
     didcomm.message.Message = Message
     pe.__forward_if_needed = mock__forward_if_needed
-    #ServiceEncoder._expand_service = mock_expand_service
+    # ServiceEncoder._expand_service = mock_expand_service
     ServiceEncoder.reencode_service = mock_reencode_service
     did_peer_2.resolve = resolve
-
