@@ -10,6 +10,36 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+################################################################################
+###                       Reasons for Monkey-Patch                           ###
+#                                                                              #
+# The reasons for the monkey-patching are as follows (creation of relevant PRs
+# and/or issues should be created, if necessary)
+# mock_expand_service:
+#     Library: did-peer-2
+#     Reason: Originally used to work around the nested services list from the
+#             Indicio development mediator, but has been subsequently
+#             superceded by other monkey patches.
+# mock_reencode_service:
+#     Library: did-peer-2
+#     Reason: Not patched, but used by mock_get_elements to re-encode the
+#             services block into multiple chunks if it's a list of services
+# mock_get_elements:
+#     Library: did-peer-2
+#     Reason: Re-encode the services into a possible list, then loop through
+#             the list and decode each service as necessary
+# mock__forward_if_needed:
+#     Library: didcomm-python
+#     Reason: The early check for routing_keys blocked the did_services_chain
+#             from providing forwarding capabilities
+# _elements_to_document:
+#     Library: did-peer-2
+#     Reason: No change, couldn't import for some reason for resolve function
+# resolve:
+#     Library: did-peer-2
+#     Reason: Minimal change, couldn't replace _get_elements and call it
+################################################################################
+
 
 def mock_expand_service(
     self,
