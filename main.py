@@ -6,17 +6,17 @@ import requests
 import asyncio
 import didcomm
 import websockets
-from typing import Dict
 import logging
-import base64
 
 #from did_peer_2 import resolve
 from temp_libraries.monkey_patch import resolve
 from did_peer_2 import KeySpec, generate
+from didcomm.message import Message
+from pydid.did import DID
 import sys
 
 from temp_libraries import monkey_patch
-from temp_libraries.resolvers import BasicSecretsResolver, PeerDID2, get_resolver_config
+from temp_libraries.resolvers import get_resolver_config
 from temp_libraries.secrets import SecretsManager
 
 LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO').upper()
@@ -40,7 +40,7 @@ MEDIATOR_DID = "did:peer:2.Ez6LSjtPCo1WL8JHzibm6iLaHU46Eahoaj6BVDezuVrZX6QZ1.Vz6
 
 
 class Bot:
-    async def handle_command(self, command, message):
+    async def handle_command(self, command: str, message: Message):
         match command.lower().strip().split()[0]:
             case "hello":
                 print(message)
@@ -64,13 +64,13 @@ class Bot:
             case _:
                 await self.sendBasicMessage(message.frm, command)
 
-    async def handle_message(self, msg_type, message):
+    async def handle_message(self, msg_type: str, message: Message):
         match msg_type:
             case "https://didcomm.org/basicmessage/2.0/message":
                 await self.handle_command(message.body["content"], message)
             case "https://didcomm.org/trust-ping/2.0/ping":
                 if message.body.get("response_requested") == True:
-                    new_message = didcomm.message.Message(
+                    new_message = Message(
                         type="https://didcomm.org/trust-ping/2.0/ping-response",
                         body={},
                         id=str(uuid.uuid4()),
@@ -80,7 +80,7 @@ class Bot:
                     )
                     await self.sendMessage(new_message, target=message.frm)
             case "https://didcomm.org/user-profile/1.0/request-profile":
-                new_message = didcomm.message.Message(
+                new_message = Message(
                     type="https://didcomm.org/user-profile/1.0/profile",
                     body={
                         "profile": {
@@ -98,7 +98,7 @@ class Bot:
 
     async def fetch_messages(self):
         #didcomm.message.GenericMessage.lang="en"
-        message = didcomm.message.Message(
+        message = Message(
             type="https://didcomm.org/messagepickup/3.0/status-request",
             id=str(uuid.uuid4()),
             body={},
@@ -109,7 +109,7 @@ class Bot:
         #print(message)
 
         if message.body["message_count"] > 0:
-            message = didcomm.message.Message(
+            message = Message(
                 type="https://didcomm.org/messagepickup/3.0/delivery-request",
                 id=str(uuid.uuid4()),
                 body={
@@ -133,7 +133,7 @@ class Bot:
                 if msg.type == "https://didcomm.org/basicmessage/2.0/message":
                     logger.info(f"Got message: {msg.body['content']}")
                 #return
-                message = didcomm.message.Message(
+                message = Message(
                     type="https://didcomm.org/messagepickup/3.0/messages-received",
                     id=str(uuid.uuid4()),
                     body={
@@ -147,7 +147,7 @@ class Bot:
                 return
 
 
-    async def sendMessage(self, message, target, ws=False):
+    async def sendMessage(self, message: Message, target: DID, ws: websockets.connect | None = None):
 
         pack_config = didcomm.pack_encrypted.PackEncryptedConfig()
         pack_config.forward = True
@@ -187,8 +187,8 @@ class Bot:
             pass
         return
 
-    async def sendBasicMessage(self, target_did, message: str):
-        message = didcomm.message.Message(
+    async def sendBasicMessage(self, target_did: DID, message: str):
+        message = Message(
             type="https://didcomm.org/basicmessage/2.0/message",
             body={"content": message},
             id=str(uuid.uuid4()),
@@ -201,7 +201,7 @@ class Bot:
         async with self.websocket as websocket:
             #await websocket.send("msg")
             logger.info("Listening on websocket")
-            message = didcomm.message.Message(
+            message = Message(
                 type="https://didcomm.org/messagepickup/3.0/live-delivery-change",
                 id=str(uuid.uuid4()),
                 body={
@@ -257,7 +257,7 @@ class Bot:
         #target_did = user_input
         self.did = self.my_did
 
-        message = didcomm.message.Message(
+        message = Message(
             type="https://didcomm.org/coordinate-mediation/3.0/mediate-request",
             id=str(uuid.uuid4()),
             body={},
@@ -284,7 +284,7 @@ class Bot:
             )
             print("mediated did: ", self.did)
             self.resolvers_config.secrets_resolver.add_keys_for_did(self.did)
-        #message = didcomm.message.Message(
+        #message = Message(
         #    type="https://didcomm.org/coordinate-mediation/3.0/recipient-update",
         #    id=str(uuid.uuid4()),
         #    body={
@@ -318,7 +318,7 @@ class Bot:
 
         from datetime import datetime
         display_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        message = didcomm.message.Message(
+        message = Message(
             type="https://didcomm.org/user-profile/1.0/profile",
             body={
                 "profile": {
@@ -334,7 +334,7 @@ class Bot:
 
         # return
 
-        message = didcomm.message.Message(
+        message = Message(
             type="https://didcomm.org/question-answer/1.0/question",
             body={
                 "question_text": "Alice, are you on the phone with Bob from Faber Bank right now?",

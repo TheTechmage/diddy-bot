@@ -3,7 +3,7 @@ from did_peer_2 import KeySpec, generate
 from nacl.signing import SigningKey
 import logging
 import json
-import uuid
+from typing import Dict, Any
 
 
 logger = logging.getLogger(__name__)
@@ -17,16 +17,16 @@ MULTICODEC_ED25519_PUB = b"\xed\x01"
 MULTICODEC_X25519_PUB = b"\xec\x01"
 MULTICODEC_ED25519_PRIV = b"\x13\x00"
 MULTICODEC_X25519_PRIV = b"\x13\x02"
-MULTICODEC_ED25519_PRIV = b"\x80&" 
+MULTICODEC_ED25519_PRIV = b"\x80&"
 MULTICODEC_X25519_PRIV = b"\x82&"
 
 
 class SecretsManager:
 
-    def __init__(self, storage_file: str = None):
+    def __init__(self, storage_file: str | None = None):
         self.file = storage_file or "secrets.json"
 
-    def load_secrets(self):
+    def load_secrets(self) -> Dict[str, Any] | None:
         try:
             file = open(self.file, "rb")
             config = json.loads(file.read())
@@ -35,7 +35,7 @@ class SecretsManager:
             logger.debug("Secrets file doesn't exist")
             return None
 
-    def store_secrets(self, secrets):
+    def store_secrets(self, secrets: Dict[str, Any]):
         try:
             file = open(self.file, "wb+")
             file.write(json.dumps(secrets).encode())
@@ -43,7 +43,7 @@ class SecretsManager:
             logger.debug("Failed to write secrets file")
             logger.exception(err)
 
-    def generate_secrets(self):
+    def generate_secrets(self) -> Dict[str, Any]:
 
         # ED25519 - For authentication
         priv_key = SigningKey.generate()
@@ -90,7 +90,7 @@ class SecretsManager:
 
         return secrets
 
-    def generate_and_save(self):
+    def generate_and_save(self) -> Dict[str, Any]:
         secrets = self.generate_secrets()
         self.store_secrets(secrets)
         return secrets

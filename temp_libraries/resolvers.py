@@ -34,7 +34,7 @@ class PeerDID2(didcomm.did_doc.did_resolver.DIDResolver):
             "X25519KeyAgreementKey2020": VerificationMethodType.X25519_KEY_AGREEMENT_KEY_2020,  # noqa
         }[method_type]
 
-    async def resolve(self, did: str) -> Optional[pydid.doc.DIDDocument]:
+    async def resolve(self, did: pydid.DID) -> Optional[pydid.doc.DIDDocument]:
         if did.startswith("did:key:"):
             services = [
                 didcomm.did_doc.did_doc.DIDCommService(
@@ -158,7 +158,7 @@ class PeerDID2(didcomm.did_doc.did_resolver.DIDResolver):
 
 class BasicSecretsResolver(didcomm.secrets.secrets_resolver.SecretsResolver):
 
-    def __init__(self, secrets, secrets_config):
+    def __init__(self, secrets: Dict[str, Any], secrets_config: Dict[str, Any]):
         self._secrets = secrets
         self.secrets_config = secrets_config
 
@@ -169,7 +169,7 @@ class BasicSecretsResolver(didcomm.secrets.secrets_resolver.SecretsResolver):
     async def get_keys(self, kids: List[str]) -> List[str]:
         return [kid for kid in self._secrets.keys() if kid in kids]
 
-    def add_keys_for_did(self, did):
+    def add_keys_for_did(self, did: pydid.DID):
         pub_key_multi = self.secrets_config["ed25519"]["public"]
         x_pub_key_multi = self.secrets_config["x25519"]["public"]
         priv_key_multi = self.secrets_config["ed25519"]["private"]
@@ -196,7 +196,7 @@ class BasicSecretsResolver(didcomm.secrets.secrets_resolver.SecretsResolver):
         }
         self._secrets.update(secret)
 
-def get_resolver_config(secrets):
+def get_resolver_config(secrets: Dict[str, Any]) -> didcomm.common.resolvers.ResolversConfig:
         did = secrets["did"]
         pub_key_multi = secrets["ed25519"]["public"]
         x_pub_key_multi = secrets["x25519"]["public"]
