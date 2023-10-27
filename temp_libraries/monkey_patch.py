@@ -38,6 +38,9 @@ logger = logging.getLogger(__name__)
 # resolve:
 #     Library: did-peer-2
 #     Reason: Minimal change, couldn't replace _get_elements and call it
+# Message:
+#     Library: didcomm-python
+#     Reason: Delete the "lang" attribute during unpack to prevent exceptions
 ################################################################################
 
 
