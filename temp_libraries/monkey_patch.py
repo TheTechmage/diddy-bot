@@ -1,6 +1,10 @@
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any, Union, Tuple
+import didcomm
+import didcomm.message
 import didcomm.pack_encrypted as pe
-from did_peer_2 import ServiceEncoder
+import did_peer_2
+import json
+from did_peer_2 import ServiceEncoder, KeySpec, PurposeCode, peer2to3, PATTERN
 from didcomm.protocols.routing.forward import wrap_in_forward
 import logging
 
@@ -36,6 +40,94 @@ def mock_expand_service(
             ]
 
     return service
+
+
+def mock_reencode_service(self, data: str) -> Union[str, List[str]]:
+    """Decode a service string into a dictionary."""
+    services = json.loads(self._b64_to_bytes(data).decode("utf-8"))
+    reencoded = []
+    if isinstance(services, list):
+        for service in services:
+            reencoded.append(
+                self.encode_service(service)
+            )
+    else:
+        return data
+    return reencoded
+
+
+def mock_get_elements(did: str) -> Tuple[List[KeySpec], List[Dict[str, Any]]]:
+    """Get the elements of a did:peer:2 DID."""
+    elements = did.split(".")[1:]
+
+    keys: List[KeySpec] = []
+    service_encoder = ServiceEncoder()
+    services: List[Dict[str, Any]] = []
+
+    for element in elements:
+        purpose = PurposeCode(element[0])
+        value = element[1:]
+        if purpose in PurposeCode.key_purposes():
+            keys.append(KeySpec(purpose, value))
+        else:
+            assert purpose == PurposeCode.service
+            value = service_encoder.reencode_service(value)
+            if isinstance(value, list):
+                for service in value:
+                    services.append(service_encoder.decode_service(service))
+            else:
+                services.append(service_encoder.decode_service(value))
+
+    return keys, services
+
+
+def _elements_to_document(
+    did: str, keys: List[KeySpec], services: List[Dict[str, Any]]
+):
+    """Construct a DID Document from the given did, keys, and services."""
+    document = {}
+    document["@context"] = [
+        "https://www.w3.org/ns/did/v1",
+        "https://w3id.org/security/multikey/v1",
+    ]
+    document["id"] = did
+
+    for index, key in enumerate(keys, start=1):
+        verification_method = {
+            "type": key.vm_type,
+            "id": f"#key-{index}",
+            "controller": did,
+            "publicKeyMultibase": key.material,
+        }
+        document.setdefault("verificationMethod", []).append(verification_method)
+        document.setdefault(key.purpose.verification_relationship, []).append(
+            f"#key-{index}"
+        )
+
+    unidentified_index = 0
+    for service in services:
+        if "id" not in service:
+            if unidentified_index == 0:
+                service["id"] = "#service"
+            else:
+                service["id"] = f"#service-{unidentified_index}"
+            unidentified_index += 1
+        document.setdefault("service", []).append(service)
+
+    return document
+
+
+def resolve(did: str) -> Dict[str, Any]:
+    """Resolve a did:peer:2 DID."""
+    if not PATTERN.match(did):
+        raise ValueError(f"Invalid did:peer:2: {did}")
+
+    keys, services = mock_get_elements(did)
+    # print("keys: ", keys)
+    document = _elements_to_document(did, keys, services)
+    document["alsoKnownAs"] = [peer2to3(did)]
+
+    return document
 
 
 async def mock__forward_if_needed(
@@ -102,5 +194,7 @@ class Message(didcomm.message.GenericMessage[didcomm.common.types.JSON_OBJ]):
 def patch():
     didcomm.message.Message = Message
     pe.__forward_if_needed = mock__forward_if_needed
-    ServiceEncoder._expand_service = mock_expand_service
+    #ServiceEncoder._expand_service = mock_expand_service
+    ServiceEncoder.reencode_service = mock_reencode_service
+    did_peer_2.resolve = resolve
 
