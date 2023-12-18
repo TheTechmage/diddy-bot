@@ -44,8 +44,23 @@ class SecretsManager:
         try:
             file = open(self.file, "rb")
             config = json.loads(file.read())
+            vk = config["ed25519"]["private"]
+            ek = config["x25519"]["private"]
+
+            from base58 import b58decode
+            from base64 import b64encode
+            vk = b58decode(vk[1:])
+            ek = b58decode(ek[1:])
+            vk = vk[len(MULTICODEC_ED25519_PRIV):]
+            ek = ek[len(MULTICODEC_X25519_PRIV):]
+            vk = b64encode(vk).decode()
+            ek = b64encode(ek).decode()
+            print(vk,ek)
+
+            #asdasd
             return config
         except Exception:
+            asdasd
             logger.debug("Secrets file doesn't exist")
             return None
 

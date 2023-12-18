@@ -1,7 +1,7 @@
 import didcomm
 from base58 import b58encode
 import json
-from peerdid.keys import BaseKey
+#from peerdid.keys import BaseKey
 import pydid
 from typing import Optional, List, Dict, Any
 from didcomm.common.types import VerificationMethodType
@@ -55,6 +55,7 @@ class PeerDID2(didcomm.did_doc.did_resolver.DIDResolver):
             Optional[pydid.doc.DIDDocument]:
         """
         if did.startswith("did:key:"):
+            return
             services = [
                 didcomm.did_doc.did_doc.DIDCommService(
                     id="did:key:z6MkgSYBM63iHNeiT2VSQu7bbtXhGYCQrPJ8uEGurbfGbbgE",
@@ -121,7 +122,17 @@ class PeerDID2(didcomm.did_doc.did_resolver.DIDResolver):
             )
             return resolved
         doc = resolve(did)
-        # print(json.dumps(doc, indent=2, default=lambda o: '<not serializable>'))
+        #print("!!!!!!!!!!!!!!!!")
+        #print("!!!!!!!!!!!!!!!!")
+        #print("!!!!!!!!!!!!!!!!")
+        #print("!!!!!!!!!!!!!!!!")
+        #print("!!!!!!!!!!!!!!!!")
+        #print(json.dumps(doc, indent=2, default=lambda o: '<not serializable>'))
+        #print("^^^^^^^^^^^^^^^^")
+        #print("^^^^^^^^^^^^^^^^")
+        #print("^^^^^^^^^^^^^^^^")
+        #print("^^^^^^^^^^^^^^^^")
+        #print("^^^^^^^^^^^^^^^^")
         doc["service"] = [
             self.transform_new_to_old_service(service) for service in doc["service"]
         ]
@@ -136,12 +147,16 @@ class PeerDID2(didcomm.did_doc.did_resolver.DIDResolver):
             """
             for key in doc["verificationMethod"]:
                 if key["id"] == id:
+                    #return docdid + id
                     return docdid + "#" + key["publicKeyMultibase"][1:9]
 
-        doc["authentication"] = [get_key(id) for id in doc["authentication"]]
-        doc["keyAgreement"] = [get_key(id) for id in doc["keyAgreement"]]
+        at = doc["authentication"]
+        ka = doc["keyAgreement"]
+        doc["authentication"] = [get_key(id) for id in at]
+        doc["keyAgreement"] = [get_key(id) for id in ka]
         # for vm in doc["verificationMethod"]:
         #     print(vm)
+        vm_orig = doc["verificationMethod"]
         doc["verificationMethod"] = [
             didcomm.did_doc.did_doc.VerificationMethod(
                 **{
@@ -156,6 +171,21 @@ class PeerDID2(didcomm.did_doc.did_resolver.DIDResolver):
             )
             for vm in doc["verificationMethod"]
         ]
+        doc["verificationMethod"].extend([
+            didcomm.did_doc.did_doc.VerificationMethod(
+                **{
+                    "id": docdid + vm["id"],
+                    "controller": vm["controller"],
+                    "type": self.method_type_str_to_enum(vm["type"]),
+                    "verification_material": didcomm.common.types.VerificationMaterial(
+                        format=didcomm.common.types.VerificationMaterialFormat.MULTIBASE,
+                        value=vm["publicKeyMultibase"],
+                    ),
+                }
+            )
+            for vm in vm_orig
+        ])
+        #print(doc)
         services = [
             didcomm.did_doc.did_doc.DIDCommService(
                 id=did + service["id"],
@@ -266,6 +296,26 @@ class BasicSecretsResolver(didcomm.secrets.secrets_resolver.SecretsResolver):
                     ),
                 }
             ),
+            f"{did}#key-1": didcomm.secrets.secrets_resolver.Secret(
+                **{
+                    "type": didcomm.common.types.VerificationMethodType.ED25519_VERIFICATION_KEY_2020,
+                    "kid": f"{did}#key-1",
+                    "verification_material": didcomm.common.types.VerificationMaterial(
+                        format=didcomm.common.types.VerificationMaterialFormat.MULTIBASE,
+                        value=priv_key_multi,
+                    ),
+                }
+            ),
+            f"{did}#key-2": didcomm.secrets.secrets_resolver.Secret(
+                **{
+                    "type": didcomm.common.types.VerificationMethodType.X25519_KEY_AGREEMENT_KEY_2020,
+                    "kid": f"{did}#key-2",
+                    "verification_material": didcomm.common.types.VerificationMaterial(
+                        format=didcomm.common.types.VerificationMaterialFormat.MULTIBASE,
+                        value=x_priv_key_multi,
+                    ),
+                }
+            ),
         }
         self._secrets.update(secret)
 
@@ -304,6 +354,26 @@ def get_resolver_config(
                 **{
                     "type": didcomm.common.types.VerificationMethodType.X25519_KEY_AGREEMENT_KEY_2020,
                     "kid": f"{did}#{x_pub_ref}",
+                    "verification_material": didcomm.common.types.VerificationMaterial(
+                        format=didcomm.common.types.VerificationMaterialFormat.MULTIBASE,
+                        value=x_priv_key_multi,
+                    ),
+                }
+            ),
+            f"{did}#key-2": didcomm.secrets.secrets_resolver.Secret(
+                **{
+                    "type": didcomm.common.types.VerificationMethodType.ED25519_VERIFICATION_KEY_2020,
+                    "kid": f"{did}#key-2",
+                    "verification_material": didcomm.common.types.VerificationMaterial(
+                        format=didcomm.common.types.VerificationMaterialFormat.MULTIBASE,
+                        value=priv_key_multi,
+                    ),
+                }
+            ),
+            f"{did}#key-1": didcomm.secrets.secrets_resolver.Secret(
+                **{
+                    "type": didcomm.common.types.VerificationMethodType.X25519_KEY_AGREEMENT_KEY_2020,
+                    "kid": f"{did}#key-1",
                     "verification_material": didcomm.common.types.VerificationMaterial(
                         format=didcomm.common.types.VerificationMaterialFormat.MULTIBASE,
                         value=x_priv_key_multi,

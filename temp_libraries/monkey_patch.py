@@ -122,8 +122,9 @@ def _elements_to_document(
     document["id"] = did
 
     for index, key in enumerate(keys, start=1):
+        #print(key.key_agreement)
         verification_method = {
-            "type": key.vm_type,
+            "type": "Multikey",
             "id": f"#key-{index}",
             "controller": did,
             "publicKeyMultibase": key.material,
@@ -221,6 +222,10 @@ class Message(didcomm.message.GenericMessage[didcomm.common.types.JSON_OBJ]):
     def from_dict(self, d: dict) -> didcomm.message.Message:
         if "lang" in d:
             del d["lang"]
+        # print("!!!!!!!!!!!!!!!!")
+        # print(d)
+        # print("!!!!!!!!!!!!!!!!")
+        #breakpoint()
         return super().from_dict(d)
 
 
