@@ -3,13 +3,10 @@ import aiohttp
 import asyncio
 import attr
 import didcomm_messaging
-import json
 import logging
 import os
 import sys
-import traceback
 import uuid
-import websockets
 
 from did_peer_2 import KeySpec, generate
 from didcomm.message import Message as DIDCommMessage
