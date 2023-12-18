@@ -1,23 +1,19 @@
 import json
 import uuid
 import os
+from typing import Optional
+import attr
 import traceback
-import requests
+import aiohttp
 import asyncio
-import didcomm
 import websockets
 import logging
+import didcomm_messaging
 
-# from did_peer_2 import resolve
-from temp_libraries.monkey_patch import resolve
 from did_peer_2 import KeySpec, generate
-from didcomm.message import Message
+from didcomm.message import Message as DIDCommMessage
 from pydid.did import DID
 import sys
-
-from temp_libraries import monkey_patch
-from temp_libraries.resolvers import get_resolver_config
-from temp_libraries.secrets import SecretsManager
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 root = logging.getLogger()
@@ -32,11 +28,50 @@ root.addHandler(handler)
 logging.getLogger("didcomm").setLevel(logging.WARN)
 logger = logging.getLogger(__name__)
 
-monkey_patch.patch()
+MEDIATOR_DID = "did:peer:2.Vz6MktASEQH6L6F68KwR45MiMJQMC1vv9RotMp8iwzFCfKksZ.Ez6LSjtPCo1WL8JHzibm6iLaHU46Eahoaj6BVDezuVrZX6QZ1.SeyJ0IjoiZG0iLCJzIjp7InVyaSI6Imh0dHBzOi8vZGV2LmNsb3VkbWVkaWF0b3IuaW5kaWNpb3RlY2guaW8vbWVzc2FnZSIsImEiOlsiZGlkY29tbS92MiIsImRpZGNvbW0vYWlwMjtlbnY9cmZjMTkiXSwiciI6W119fQ.SeyJ0IjoiZG0iLCJzIjp7InVyaSI6IndzczovL3dzLmRldi5jbG91ZG1lZGlhdG9yLmluZGljaW90ZWNoLmlvL3dzIiwiYSI6WyJkaWRjb21tL3YyIiwiZGlkY29tbS9haXAyO2Vudj1yZmMxOSJdLCJyIjpbXX19"
 
-from didcomm.unpack import unpack
+OLD_BOT_DID = 'did:peer:2.Ez6LSg7dftRECRoeLvHx5FXG77SLL2GGHX5C2UbWbQTrQw8xb.Vz6MksRzg3RHj8PK7dJb53TgynsCDyKMQfQfG7oP5ggrAuFa1.SeyJ0IjoiZG0iLCJzIjp7InVyaSI6ImRpZDpwZWVyOjIuVno2TWt0QVNFUUg2TDZGNjhLd1I0NU1pTUpRTUMxdnY5Um90TXA4aXd6RkNmS2tzWi5FejZMU2p0UENvMVdMOEpIemlibTZpTGFIVTQ2RWFob2FqNkJWRGV6dVZyWlg2UVoxLlNleUowSWpvaVpHMGlMQ0p6SWpwN0luVnlhU0k2SW1oMGRIQnpPaTh2WkdWMkxtTnNiM1ZrYldWa2FXRjBiM0l1YVc1a2FXTnBiM1JsWTJndWFXOHZiV1Z6YzJGblpTSXNJbUVpT2xzaVpHbGtZMjl0YlM5Mk1pSXNJbVJwWkdOdmJXMHZZV2x3TWp0bGJuWTljbVpqTVRraVhTd2ljaUk2VzExOWZRLlNleUowSWpvaVpHMGlMQ0p6SWpwN0luVnlhU0k2SW5kemN6b3ZMM2R6TG1SbGRpNWpiRzkxWkcxbFpHbGhkRzl5TG1sdVpHbGphVzkwWldOb0xtbHZMM2R6SWl3aVlTSTZXeUprYVdSamIyMXRMM1l5SWl3aVpHbGtZMjl0YlM5aGFYQXlPMlZ1ZGoxeVptTXhPU0pkTENKeUlqcGJYWDE5IiwiYSI6WyJkaWRjb21tL3YyIl19fQ'
 
-MEDIATOR_DID = "did:peer:2.Ez6LSjtPCo1WL8JHzibm6iLaHU46Eahoaj6BVDezuVrZX6QZ1.Vz6MktASEQH6L6F68KwR45MiMJQMC1vv9RotMp8iwzFCfKksZ.SW3sidCI6ImRtIiwicyI6Imh0dHBzOi8vZGV2LmNsb3VkbWVkaWF0b3IuaW5kaWNpb3RlY2guaW8vbWVzc2FnZSIsInIiOltdLCJhIjpbImRpZGNvbW0vdjIiLCJkaWRjb21tL2FpcDI7ZW52PXJmYzE5Il19LHsidCI6ImRtIiwicyI6IndzczovL3dzLmRldi5jbG91ZG1lZGlhdG9yLmluZGljaW90ZWNoLmlvL3dzIiwiciI6W10sImEiOlsiZGlkY29tbS92MiIsImRpZGNvbW0vYWlwMjtlbnY9cmZjMTkiXX1d"
+from pydid import DIDDocument
+from aries_askar import Key, KeyAlg
+from didcomm_messaging.crypto.backend.askar import AskarCryptoService, AskarSecretKey
+from didcomm_messaging.crypto.backend.basic import InMemorySecretsManager
+from didcomm_messaging.packaging import PackagingService
+from didcomm_messaging.multiformats import multibase
+from didcomm_messaging.multiformats import multicodec
+from didcomm_messaging.resolver.peer import Peer2, Peer4
+from didcomm_messaging.resolver import PrefixResolver
+from didcomm_messaging.routing import RoutingService
+
+@attr.s(auto_attribs=True)
+class Message(DIDCommMessage):
+    lang: Optional[str] = None
+    def __init__(cls, *args, lang=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        cls.lang = lang
+
+class CompatibilityPrefixResolver(PrefixResolver):
+    """stub."""
+
+    async def resolve_and_parse(self, did: str) -> DIDDocument:
+        """Resolve a DID and parse the DID document."""
+        doc = await self.resolve(did)
+        #return DIDDocument.deserialize(doc)
+        id_map = {}
+        def set_id(method):
+            new_id = method["publicKeyMultibase"][1:9]
+            id_map[method["id"]] = new_id
+            method["id"] = did + "#" + new_id
+            return method
+        doc["verificationMethod"] = [
+            set_id(method) for method in doc["verificationMethod"]
+        ]
+        doc["authentication"] = [
+            did + "#" + id_map.get(id) for id in doc["authentication"]
+        ]
+        doc["keyAgreement"] = [did + "#" + id_map.get(id) for id in doc["keyAgreement"]]
+        return DIDDocument.deserialize(doc)
+
 
 
 class Bot:
@@ -53,12 +88,13 @@ class Bot:
         match command.lower().strip().split()[0]:
             case "hello":
                 print(message)
-                await self.sendBasicMessage(message.frm, "Well howdy there partner!")
+                #await self.sendBasicMessage(message.frm, "Well howdy there partner!")
             case "haiku":
-                await self.sendBasicMessage(
-                    message.frm,
-                    "Glorious leaping,\nSurprisingly didcomm smiles,\nwatching the kitten",
-                )
+                pass
+                #await self.sendBasicMessage(
+                #    message.frm,
+                #    "Glorious leaping,\nSurprisingly didcomm smiles,\nwatching the kitten",
+                #)
             case "c2f":
                 try:
                     c = float(command.strip().split()[1])
@@ -82,7 +118,8 @@ class Bot:
                         message.frm, "Invalid command, try `c2f 32.5`"
                     )
             case _:
-                await self.sendBasicMessage(message.frm, command)
+                logger.info("Received message %s", command.replace('\n', ' ').replace('\r', ''))
+                print(message)
 
     async def handle_message(self, msg_type: str, message: Message):
         """Handles DIDComm messages based on msg_type.
@@ -125,7 +162,6 @@ class Bot:
     async def fetch_messages(self):
         """Fetch new messages from the mediator that have yet to be handled.
         """
-        # didcomm.message.GenericMessage.lang="en"
         message = Message(
             type="https://didcomm.org/messagepickup/3.0/status-request",
             id=str(uuid.uuid4()),
@@ -134,7 +170,6 @@ class Bot:
             to=[MEDIATOR_DID],
         )
         message = await self.sendMessage(message, target=MEDIATOR_DID)
-        # print(message)
 
         if message.body["message_count"] > 0:
             message = Message(
@@ -147,20 +182,15 @@ class Bot:
                 to=[MEDIATOR_DID],
             )
             message = await self.sendMessage(message, target=MEDIATOR_DID)
-            # print(message)
             for attach in message.attachments:
                 logger.info("Received message %s", attach.id[:-58])
-                unpacked_msg = await unpack(
-                    resolvers_config=self.resolvers_config,
-                    packed_msg=attach.data.json,
-                )
-                msg = unpacked_msg.message
-                logger.info("Received message %s", unpacked_msg.message)
+                unpacked = await self.get_didcomm().packaging.unpack(json.dumps(attach.data.json))
+                msg = unpacked[0].decode()
+                msg =  Message.from_json(msg)
                 await self.handle_message(msg.type, msg)
-                # print(msg.type)
                 if msg.type == "https://didcomm.org/basicmessage/2.0/message":
-                    logger.info(f"Got message: {msg.body['content']}")
-                # return
+                    logmsg = msg.body['content'].replace('\n', ' ').replace('\r', '')
+                    logger.info(f"Got message: {logmsg}")
                 message = Message(
                     type="https://didcomm.org/messagepickup/3.0/messages-received",
                     id=str(uuid.uuid4()),
@@ -185,46 +215,32 @@ class Bot:
             ws (websockets.connect | None): ws
         """
 
-        pack_config = didcomm.pack_encrypted.PackEncryptedConfig()
-        pack_config.forward = True
-        pack_result = await didcomm.pack_encrypted.pack_encrypted(
-            resolvers_config=self.resolvers_config,
+        message_wrapper = message
+        message = message.as_dict()
+        packy = await self.get_didcomm().pack(
             message=message,
-            frm=self.my_did if target == MEDIATOR_DID else self.did,
             to=target,
-            pack_config=pack_config,
+            frm=self.my_did if target == MEDIATOR_DID else self.did,
         )
-        packed_msg = pack_result.packed_msg
-        logger.debug(
-            f"Sending {message} to {pack_result.service_metadata.service_endpoint}"
-        )
-        logger.info(f"Sending a '{message.type}' message to target DID.")
+        packed = packy.message
+        endpoint = packy.get_endpoint("http")
+
         if ws:
-            logger.debug("Sending via websocket %s", packed_msg)
-            await ws.send(packed_msg)
+            logger.info("Sending via websocket %s", packed)
+            await ws.send(packed)
             logger.debug("Sent over websocket")
             return
-        post_response = requests.post(
-            pack_result.service_metadata.service_endpoint, data=packed_msg
-        )
-        try:
-            # logging.debug(json.dumps(json.loads(packed_msg), indent=2))
-            post_response_json = post_response.json()
-            msg_type = post_response_json.get("type")
-            if msg_type and "problem-report" in msg_type:
-                logger.error(post_response_json)
-            logger.error(post_response_json)
-            # print(json.dumps(didcomm.__dict__, indent=2, default=lambda o: '<not serializable>'))
-            unpack_result = await unpack(
-                resolvers_config=self.resolvers_config,
-                packed_msg=post_response_json,
-            )
-            message = unpack_result.message
-            logger.debug(message)
-            return message
-        except Exception as err:
-            logger.exception(err)
-            pass
+
+        async with aiohttp.ClientSession() as session:
+            print("posting message type", message_wrapper.type)
+            print("posting to ", endpoint)
+            async with session.post(endpoint, data=packed) as resp:
+                packed = await resp.text()
+                if len(packed) > 0:
+                    unpacked = await self.get_didcomm().packaging.unpack(packed)
+                    msg = unpacked[0].decode()
+                    print("UNPACKED MESSAGE FROM REMOTE", msg)
+                    return Message.from_json(msg)
         return
 
     async def sendBasicMessage(self, target_did: DID, message: str):
@@ -263,15 +279,13 @@ class Bot:
             # async for message in websocket:
             while True:
                 message = await websocket.recv()
-                # print(message)
                 logger.info("Got message over websocket")
                 try:
-                    unpacked_msg = await unpack(
-                        resolvers_config=self.resolvers_config,
-                        packed_msg=json.loads(message.decode()),
-                    )
-                    msg = unpacked_msg.message
-                    logger.info("Received message %s", unpacked_msg.message)
+                    unpacked = await self.get_didcomm().packaging.unpack(message)
+                    msg = unpacked[0].decode()
+                    msg = Message.from_json(msg)
+                    # logger.info("Received message %s", unpacked_msg.message)
+                    logger.info("Received websocket message %s", msg.type)
                     if msg.frm != MEDIATOR_DID:
                         await self.handle_message(msg.type, msg)
                 except Exception as err:
@@ -280,32 +294,63 @@ class Bot:
                     pass
             await websocket.close()
 
+    def get_didcomm(self):
+        return self._DMP
+
     async def start(self):
         """Start up the "bot" application and begin sending/receiving messages.
         """
-        secret_manager = SecretsManager()
-        secrets = secret_manager.load_secrets()
-        # secrets = None
-        if not secrets:
-            secrets = secret_manager.generate_secrets()
-            # secrets = secret_manager.generate_and_save()
 
-        self.my_did = secrets["did"]
-        print("did: ", self.my_did)
-        resolved = resolve(self.my_did)
-        print(json.dumps(resolved, indent=2))
+        crypto = AskarCryptoService()
+        secrets = InMemorySecretsManager()
+        resolver = CompatibilityPrefixResolver({"did:peer:2": Peer2(), "did:peer:4": Peer4()})
+        packer = PackagingService(
+            resolver, crypto, secrets
+        )
 
-        self.resolvers_config = get_resolver_config(secrets)
-        target_did = "did:peer:2.Vz6Mks5aqa1RFwGSxWdY7FTpAyqPzym5hJCjDJG8UZkhUueSU.Ez6LSjz7FHdcyhpArArFr6Z1DX9cdq3sct7iQMidwKX43LAyG.SeyJ0IjoiZG0iLCJzIjp7InVyaSI6ImRpZDpwZWVyOjIuRXo2TFNqdFBDbzFXTDhKSHppYm02aUxhSFU0NkVhaG9hajZCVkRlenVWclpYNlFaMS5WejZNa3RBU0VRSDZMNkY2OEt3UjQ1TWlNSlFNQzF2djlSb3RNcDhpd3pGQ2ZLa3NaLlNXM3NpZENJNkltUnRJaXdpY3lJNkltaDBkSEJ6T2k4dlpHVjJMbU5zYjNWa2JXVmthV0YwYjNJdWFXNWthV05wYjNSbFkyZ3VhVzh2YldWemMyRm5aU0lzSW5JaU9sdGRMQ0poSWpwYkltUnBaR052YlcwdmRqSWlMQ0prYVdSamIyMXRMMkZwY0RJN1pXNTJQWEptWXpFNUlsMTlMSHNpZENJNkltUnRJaXdpY3lJNkluZHpjem92TDNkekxtUmxkaTVqYkc5MVpHMWxaR2xoZEc5eUxtbHVaR2xqYVc5MFpXTm9MbWx2TDNkeklpd2ljaUk2VzEwc0ltRWlPbHNpWkdsa1kyOXRiUzkyTWlJc0ltUnBaR052YlcwdllXbHdNanRsYm5ZOWNtWmpNVGtpWFgxZCIsImFjY2VwdCI6WyJkaWRjb21tL3YyIl19fQ"
+        router = RoutingService(packaging=packer, resolver=resolver)
 
-        # user_input = input("Target DID: ").strip()
-        # try:
-        #    resolve(user_input)
-        # except Exception as err:
-        #    raise Exception("Invalid DID specified") from err
+        verkey = Key.generate(KeyAlg.ED25519)
+        xkey = Key.generate(KeyAlg.X25519)
+        did = generate(
+            [
+                KeySpec.verification(
+                    multibase.encode(
+                        multicodec.wrap("ed25519-pub", verkey.get_public_bytes()),
+                        "base58btc",
+                    )
+                ),
+                KeySpec.key_agreement(
+                    multibase.encode(
+                        multicodec.wrap("x25519-pub", xkey.get_public_bytes()), "base58btc"
+                    )
+                ),
+            ],
+            [
+                #{
+                #    "type": "DIDCommMessaging",
+                #    "serviceEndpoint": {
+                #        "uri": "https://webhook.site/47c6023d-8a74-4591-a308-36452ecb1859",
+                #        "accept": [
+                #        "didcomm/v2"
+                #        ],
+                #        "routingKeys": []
+                #    }
+                #}
+            ],
+        )
+        self.my_did = did
 
-        # target_did = user_input
-        self.did = self.my_did
+        doc = await resolver.resolve_and_parse(did)
+
+        await secrets.add_secret(AskarSecretKey(verkey, f"{did}#key-1"))
+        await secrets.add_secret(AskarSecretKey(xkey, f"{did}#key-2"))
+        await secrets.add_secret(AskarSecretKey(verkey, doc.authentication[0]))
+        await secrets.add_secret(AskarSecretKey(xkey, doc.key_agreement[0]))
+
+
+        DMP = didcomm_messaging.DIDCommMessaging(crypto=crypto, secrets=secrets, resolver=resolver, packaging=packer, routing=router)
+        self._DMP = DMP
 
         message = Message(
             type="https://didcomm.org/coordinate-mediation/3.0/mediate-request",
@@ -321,10 +366,18 @@ class Bot:
             # resolved_did = resolve(mediator_did)
             self.did = generate(
                 [
-                    KeySpec.encryption(secrets["x25519"]["public"]),
-                    KeySpec.verification(secrets["ed25519"]["public"]),
+                    KeySpec.verification(
+                        multibase.encode(
+                            multicodec.wrap("ed25519-pub", verkey.get_public_bytes()),
+                            "base58btc",
+                        )
+                    ),
+                    KeySpec.key_agreement(
+                        multibase.encode(
+                            multicodec.wrap("x25519-pub", xkey.get_public_bytes()), "base58btc"
+                        )
+                    ),
                 ],
-                # resolved_did["services"],
                 [
                     {
                         "type": "DIDCommMessaging",
@@ -336,50 +389,38 @@ class Bot:
                 ],
             )
             print("mediated did: ", self.did)
-            self.resolvers_config.secrets_resolver.add_keys_for_did(self.did)
-        # message = Message(
-        #    type="https://didcomm.org/coordinate-mediation/3.0/recipient-update",
-        #    id=str(uuid.uuid4()),
-        #    body={
-        #        "updates": [
-        #            {
-        #                "recipient_did": did,
-        #                "action": "add",
-        #            },
-        #        ],
-        #    },
-        #    frm=my_did,
-        #    to=[MEDIATOR_DID],
-        # )
-        # message = await sendMessage(message, target=MEDIATOR_DID)
-        # print(message)
+            doc = await resolver.resolve_and_parse(self.did)
+            await secrets.add_secret(AskarSecretKey(verkey, f"{self.did}#key-1"))
+            await secrets.add_secret(AskarSecretKey(xkey, f"{self.did}#key-2"))
+            await secrets.add_secret(AskarSecretKey(verkey, doc.authentication[0]))
+            await secrets.add_secret(AskarSecretKey(xkey, doc.key_agreement[0]))
+        message = Message(
+           type="https://didcomm.org/coordinate-mediation/3.0/recipient-update",
+           id=str(uuid.uuid4()),
+           body={
+               "updates": [
+                   {
+                       "recipient_did": self.did,
+                       "action": "add",
+                   },
+               ],
+           },
+           frm=self.my_did,
+           to=[MEDIATOR_DID],
+        )
+        message = await self.sendMessage(message, target=MEDIATOR_DID)
 
         await self.fetch_messages()
 
-        mediator_resolved = resolve(MEDIATOR_DID)
-        # print(mediator_resolved)
-        mediator_websocket = filter(
-            lambda x: x["serviceEndpoint"].startswith("ws"),
-            mediator_resolved["service"],
-        )
-        mediator_websocket = list(mediator_websocket)[0]
-        logger.debug("Mediator Websocket Address: %s", mediator_websocket)
-        if mediator_websocket:
-            logger.info("Found Mediation websocket, connecting")
-            self.websocket = websockets.connect(
-                uri=mediator_websocket["serviceEndpoint"]
-            )
-            self.websock_proc = asyncio.create_task(self.handle_websocket())
-            await asyncio.sleep(25)
+        target_did = input("DID to message (blank for diddy-bot)> ")
+        if not target_did.startswith("did:"):
+            target_did = OLD_BOT_DID
 
-        from datetime import datetime
-
-        display_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        message = Message(
+        new_message = Message(
             type="https://didcomm.org/user-profile/1.0/profile",
             body={
                 "profile": {
-                    "displayName": f"Frostyfrog (script) @ {display_time}",
+                    "displayName": f"Frostyfrog (script) @ Initiator",
                     "description": "I'm a bot written in python",
                 },
             },
@@ -387,36 +428,61 @@ class Bot:
             frm=self.did,
             to=[target_did],
         )
-        # await self.sendMessage(message, target_did)
+        await self.sendMessage(new_message, target=target_did)
 
-        # return
-
+        await self.sendBasicMessage(target_did, "Starting up agent")
         message = Message(
-            type="https://didcomm.org/question-answer/1.0/question",
-            body={
-                "question_text": "Alice, are you on the phone with Bob from Faber Bank right now?",
-                "question_detail": "This is optional fine-print giving context to the question and its various answers.",
-                "valid_responses": [
-                    {"text": "Yes, it's me"},
-                    {"text": "No, that's not me!"},
-                ],
-            },
+            type="https://didcomm.org/basicmessage/2.0/message",
             id=str(uuid.uuid4()),
+            body={"content": input("Message to send> ")},
             frm=self.did,
+            lang="en",
             to=[target_did],
         )
-        # await self.sendMessage(message, target_did)
+        await self.sendMessage(message, target=target_did)
+        await asyncio.sleep(1)
+        await self.fetch_messages()
+        await self.sendMessage(message, target=target_did)
+        await self.sendMessage(message, target=target_did)
 
-        # await self.sendBasicMessage(target_did, "Testing from a script!")
-        # await self.sendBasicMessage(target_did, "This contact is from a script written in Python 3. If you received this message, then that means that the proof of concept worked! However, one of the huge flaws at present is the over-complicated nature")
-        # await self.sendBasicMessage(target_did, "There are a few functions/methods being overridden in underlying libraries to bypass problems related to did:peer:2 and the libraries that implement them (primarily the didcomm library)")
-        # await self.sendBasicMessage(target_did, "Anyways, I hope you enjoyed this quick demo!")
-        await self.sendBasicMessage(target_did, "またね〜")
+
+        mediator_websocket = None
+        async def activate_websocket():
+            async def get_service(did, protocol):
+                did_doc = await self.get_didcomm().resolver.resolve_and_parse(did)
+                services = []
+                if did_doc.service:  # service is not guaranteed to exist
+                    for did_service in did_doc.service:
+                        if "didcomm/v2" in did_service.service_endpoint.accept:
+                            services.append(did_service)
+                services = [
+                    service
+                    for service in services
+                    if service.service_endpoint.uri.startswith(protocol)
+                ]
+                return services
+
+            mediator_websocket = await get_service(MEDIATOR_DID, "ws")
+            mediator_websocket = list(mediator_websocket)[0]
+            logger.info("Mediator Websocket Address: %s", mediator_websocket)
+            if mediator_websocket:
+                logger.info("Found Mediation websocket, connecting")
+                self.websocket = websockets.connect(
+                    uri=mediator_websocket.service_endpoint.uri
+                )
+                self.websock_proc = asyncio.create_task(self.handle_websocket())
+
+
+        print("%%%%%%%%%%%%%%%%%%%%%%%")
+        print("mediated did: ", self.did)
+        logger.info("mediated did: %s", self.did)
+        print("%%%%%%%%%%%%%%%%%%%%%%%")
+
         while True:
             await asyncio.sleep(5)
             if not mediator_websocket:
                 await self.fetch_messages()
-        # return
+            #await self.sendMessage(message, target=target_did)
 
 
 async def main():
