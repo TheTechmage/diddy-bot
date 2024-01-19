@@ -1,4 +1,20 @@
 import asyncio
+import uuid
+import os
+import sys
+import logging
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+root = logging.getLogger()
+root.setLevel(LOG_LEVEL)
+
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(LOG_LEVEL)
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+handler.setFormatter(formatter)
+root.addHandler(handler)
+
+logging.getLogger("didcomm").setLevel(logging.WARN)
+logger = logging.getLogger(__name__)
 
 from didcomm_messaging import quickstart
 
@@ -9,8 +25,8 @@ async def main():
     did, secrets = quickstart.generate_did()
     DMP = await quickstart.setup_default(did, secrets, enable_compatibility_prefix=True)
     relayed_did = await quickstart.setup_relay(DMP, did, RELAY_DID, *secrets) or did
-    print("our did: %s" % did)
-    print("our relayed did: %s" % relayed_did)
+    logger.info("our did: %s" % did)
+    logger.info("our relayed did: %s" % relayed_did)
 
     target_did = input("DID to message (blank for diddy-bot)> ")
     if not target_did.startswith("did:"):
